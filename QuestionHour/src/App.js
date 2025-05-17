@@ -18,13 +18,46 @@ L.Icon.Default.mergeOptions({
 });
 
 function App() {
-  const [graphData, setGraphData] = useState({
-    nodes: [
-      { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
-    ],
-    links: []
+  const [graphData, setGraphData] = useState(() => {
+    // Load initial data from localStorage or use default
+    const savedData = localStorage.getItem('graphData');
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      // Ensure links have proper source and target references
+      const nodes = parsedData.nodes || [];
+      const links = parsedData.links || [];
+      return {
+        nodes,
+        links: links.map(link => ({
+          ...link,
+          source: typeof link.source === 'string' ? link.source : nodes.find(n => n.id === link.source.id) || link.source,
+          target: typeof link.target === 'string' ? link.target : nodes.find(n => n.id === link.target.id) || link.target
+        }))
+      };
+    }
+    return {
+      nodes: [
+        { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
+      ],
+      links: []
+    };
   });
-  const [mapPoints, setMapPoints] = useState([]);
+  
+  const [mapPoints, setMapPoints] = useState(() => {
+    // Load map points from localStorage or use empty array
+    const savedPoints = localStorage.getItem('mapPoints');
+    return savedPoints ? JSON.parse(savedPoints) : [];
+  });
+
+  // Save data to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('graphData', JSON.stringify(graphData));
+  }, [graphData]);
+
+  useEffect(() => {
+    localStorage.setItem('mapPoints', JSON.stringify(mapPoints));
+  }, [mapPoints]);
+
   const [zipCode, setZipCode] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -84,6 +117,22 @@ function App() {
     }
   }, []);
 
+  // Function to reset all data
+  const resetData = () => {
+    const initialData = {
+      nodes: [
+        { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
+      ],
+      links: []
+    };
+    setGraphData(initialData);
+    setMapPoints([]);
+    localStorage.setItem('graphData', JSON.stringify(initialData));
+    localStorage.setItem('mapPoints', JSON.stringify([]));
+    setSuccessMessage('All data has been reset!');
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
   // Add a new vote node
   async function addVote(sentiment) {
     if (!zipCode) {
@@ -103,21 +152,42 @@ function App() {
       const newY = Math.sin(angle) * radius;
       const newZ = (Math.random() - 0.5) * 50;
 
-      setGraphData(prevData => ({
-        nodes: [...prevData.nodes, { 
-          id: voteId,
-          name: `ZIP: ${zipCode}`,
-          color: voteColor,
-          x: newX,
-          y: newY,
-          z: newZ
-        }],
-        links: [...prevData.links, { 
+      setGraphData(prevData => {
+        // Find existing nodes with the same ZIP code
+        const sameZipNodes = prevData.nodes.filter(node => 
+          node.id.startsWith(`vote-${zipCode}-`)
+        );
+
+        // Create new links array starting with the question link
+        const newLinks = [...prevData.links, { 
           source: 'question', 
           target: voteId,
-          color: voteColor
-        }]
-      }));
+          color: voteColor,
+          width: 4
+        }];
+
+        // Add links to all existing nodes with the same ZIP code
+        sameZipNodes.forEach(node => {
+          newLinks.push({
+            source: node.id,
+            target: voteId,
+            color: 'purple', // Different color for ZIP code connections
+            width: 4 // Make ZIP code connections more visible
+          });
+        });
+
+        return {
+          nodes: [...prevData.nodes, { 
+            id: voteId,
+            name: `ZIP: ${zipCode}`,
+            color: voteColor,
+            x: newX,
+            y: newY,
+            z: newZ
+          }],
+          links: newLinks
+        };
+      });
 
       setMapPoints(prevPoints => [...prevPoints, {
         id: voteId,
@@ -172,6 +242,20 @@ function App() {
 
   return (
     <div className="App">
+      <div className="question-box" style={{
+        margin: '30px auto 10px auto',
+        padding: '20px',
+        maxWidth: '600px',
+        background: '#f9f9f9',
+        borderRadius: '12px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        fontSize: '1.4rem',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        color: '#333'
+      }}>
+        Question of the Day: I have been stung by a bee...
+      </div>
       <div className="controls">
         <input
           type="text"
@@ -190,6 +274,9 @@ function App() {
         <button onClick={resetZoom} style={{ margin: '5px', padding: '10px' }}>
           Reset View
         </button>
+        <button onClick={resetData} style={{ backgroundColor: "#ff4444", margin: '5px', padding: '10px' }}>
+          Reset All Data
+        </button>
       </div>
       
       {error && <p className="error">{error}</p>}
@@ -203,12 +290,17 @@ function App() {
             nodeAutoColorBy="color"
             nodeLabel="name"
             linkColor='color'
+            linkWidth={4}
+            linkDirectionalParticles={2}
+            linkDirectionalParticleWidth={2}
             onNodeClick={handleNodeClick}
             enableNodeDrag={true}
             enableNavigationControls={true}
             enablePointerInteraction={true}
             width={networkContainerRef.current?.offsetWidth}
             height={networkContainerRef.current?.offsetHeight}
+            cooldownTicks={100}
+            onEngineStop={() => fgRef.current?.zoomToFit(400)}
           />
         </div>
         <div className="map-visualization">
