@@ -117,21 +117,97 @@ function App() {
     }
   }, []);
 
-  // Function to reset all data
-  const resetData = () => {
-    const initialData = {
-      nodes: [
+  // Function to fetch all responses from the server
+  const fetchResponses = async () => {
+    try {
+      const response = await fetch('/api/responses');
+      if (!response.ok) {
+        throw new Error('Failed to fetch responses');
+      }
+      const data = await response.json();
+      
+      // Convert server data to graph format
+      const nodes = [
         { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
-      ],
-      links: []
-    };
-    setGraphData(initialData);
-    setMapPoints([]);
-    localStorage.setItem('graphData', JSON.stringify(initialData));
-    localStorage.setItem('mapPoints', JSON.stringify([]));
-    setSuccessMessage('All data has been reset!');
-    setTimeout(() => setSuccessMessage(''), 3000);
+      ];
+      const links = [];
+      const points = [];
+
+      data.forEach((item, index) => {
+        const voteId = `vote-${item.location}-${item.timestamp}`;
+        const voteColor = item.response === "agree" ? "green" : "red";
+        
+        // Calculate node position
+        const angle = (index / data.length) * Math.PI * 2;
+        const radius = 100;
+        const newX = Math.cos(angle) * radius;
+        const newY = Math.sin(angle) * radius;
+        const newZ = (Math.random() - 0.5) * 50;
+
+        nodes.push({
+          id: voteId,
+          name: `ZIP: ${item.location}`,
+          color: voteColor,
+          x: newX,
+          y: newY,
+          z: newZ
+        });
+
+        // Add link to question
+        links.push({
+          source: 'question',
+          target: voteId,
+          color: voteColor,
+          width: 4
+        });
+
+        // Add points for map
+        points.push({
+          id: voteId,
+          lat: item.lat,
+          lng: item.lng,
+          color: voteColor,
+          intensity: 1
+        });
+      });
+
+      // Add links between same ZIP codes
+      const zipGroups = {};
+      nodes.forEach(node => {
+        if (node.id !== 'question') {
+          const zip = node.id.split('-')[1];
+          if (!zipGroups[zip]) {
+            zipGroups[zip] = [];
+          }
+          zipGroups[zip].push(node);
+        }
+      });
+
+      Object.values(zipGroups).forEach(group => {
+        for (let i = 0; i < group.length; i++) {
+          for (let j = i + 1; j < group.length; j++) {
+            links.push({
+              source: group[i].id,
+              target: group[j].id,
+              color: 'purple',
+              width: 4
+            });
+          }
+        }
+      });
+
+      setGraphData({ nodes, links });
+      setMapPoints(points);
+    } catch (error) {
+      console.error('Error fetching responses:', error);
+      setError('Failed to load responses from server');
+    }
   };
+
+  // Fetch responses when component mounts
+  useEffect(() => {
+    fetchResponses();
+  }, []);
 
   // Add a new vote node
   async function addVote(sentiment) {
@@ -145,57 +221,11 @@ function App() {
       const voteId = `vote-${zipCode}-${Date.now()}`;
       const voteColor = sentiment === "agree" ? "green" : "red";
       
-      // Calculate new node position in a circle around the question
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 100;
-      const newX = Math.cos(angle) * radius;
-      const newY = Math.sin(angle) * radius;
-      const newZ = (Math.random() - 0.5) * 50;
-
-      setGraphData(prevData => {
-        // Find existing nodes with the same ZIP code
-        const sameZipNodes = prevData.nodes.filter(node => 
-          node.id.startsWith(`vote-${zipCode}-`)
-        );
-
-        // Create new links array starting with the question link
-        const newLinks = [...prevData.links, { 
-          source: 'question', 
-          target: voteId,
-          color: voteColor,
-          width: 4
-        }];
-
-        // Add links to all existing nodes with the same ZIP code
-        sameZipNodes.forEach(node => {
-          newLinks.push({
-            source: node.id,
-            target: voteId,
-            color: 'purple', // Different color for ZIP code connections
-            width: 4 // Make ZIP code connections more visible
-          });
-        });
-
-        return {
-          nodes: [...prevData.nodes, { 
-            id: voteId,
-            name: `ZIP: ${zipCode}`,
-            color: voteColor,
-            x: newX,
-            y: newY,
-            z: newZ
-          }],
-          links: newLinks
-        };
-      });
-
-      setMapPoints(prevPoints => [...prevPoints, {
-        id: voteId,
-        lat: coords.lat,
-        lng: coords.lng,
-        color: voteColor,
-        intensity: 1
-      }]);
+      // Store response on server
+      await storeResponse(sentiment);
+      
+      // Fetch updated responses
+      await fetchResponses();
 
       setSuccessMessage(`Vote recorded for ZIP code ${zipCode}!`);
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -207,36 +237,50 @@ function App() {
     }
   }
 
-  // const storeResponse = (response) => {
-  //   const responses = JSON.parse(localStorage.getItem('responses') || '[]');
-  //   responses.push({
-  //     question: "You have been stung by a bee.",
-  //     response: response,
-  //     timestamp: new Date().toISOString(),
-  //     location: zipCode
-  //   });
-  //   localStorage.setItem('responses', JSON.stringify(responses));
-  // };
-
   const storeResponse = async (response) => {
     try {
-      const result = await fetch('/api/responses', {
+      const coords = await getCoordinatesFromZip(zipCode);
+      const responseData = {
+        question: "You have been stung by a bee.",
+        response: response,
+        timestamp: new Date().toISOString(),
+        location: zipCode,
+        lat: coords.lat,
+        lng: coords.lng
+      };
+
+      const apiResponse = await fetch('/api/responses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          question: "You have been stung by a bee.",
-          response: response,
-          timestamp: new Date().toISOString(),
-          location: zipCode
-        })
+        body: JSON.stringify(responseData)
       });
-      if (!result.ok) {
+
+      if (!apiResponse.ok) {
         throw new Error('Failed to store response');
       }
     } catch (error) {
       console.error('Error storing response:', error);
+      throw error;
+    }
+  };
+
+  // Function to reset all data
+  const resetData = async () => {
+    try {
+      const response = await fetch('/api/responses', {
+        method: 'DELETE'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to reset data');
+      }
+      await fetchResponses();
+      setSuccessMessage('All data has been reset!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error resetting data:', error);
+      setError('Failed to reset data');
     }
   };
 
