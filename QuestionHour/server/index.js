@@ -27,7 +27,7 @@ async function runQuery(query, params = {}) {
 }
 
 // Get all responses
-app.get('/api/responses', async (req, res) => {
+app.get('/responses', async (req, res) => {
   try {
     const query = `
       MATCH (q:Question)-[:HAS_RESPONSE]->(r:Response)
@@ -44,7 +44,7 @@ app.get('/api/responses', async (req, res) => {
 });
 
 // Add a new response
-app.post('/api/responses', async (req, res) => {
+app.post('/responses', async (req, res) => {
   try {
     const { question, response, timestamp, location, lat, lng } = req.body;
     
@@ -85,11 +85,15 @@ app.post('/api/responses', async (req, res) => {
 });
 
 // Reset all data
-app.delete('/api/responses', async (req, res) => {
+app.delete('/responses', async (req, res) => {
   try {
     const query = `
-      MATCH (n)
-      DETACH DELETE n
+      MATCH (q:Question)
+      OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
+      OPTIONAL MATCH (r)-[rel:SAME_ZIP]->()
+      DELETE rel
+      DELETE r
+      DELETE q
     `;
     await runQuery(query);
     res.json({ message: 'All data reset successfully' });

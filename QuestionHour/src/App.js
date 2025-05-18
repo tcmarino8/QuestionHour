@@ -79,9 +79,7 @@ function App() {
           lat: location.lat,
           lng: location.lng
         };
-      } else {
-        throw new Error('Could not find coordinates for ZIP code');
-      }
+      } 
     } catch (error) {
       console.error('Error geocoding ZIP code:', error);
       throw error;
@@ -120,7 +118,7 @@ function App() {
   // Function to fetch all responses from the server
   const fetchResponses = async () => {
     try {
-      const response = await fetch('/api/responses');
+      const response = await fetch('/responses');  // Updated endpoint
       if (!response.ok) {
         throw new Error('Failed to fetch responses');
       }
@@ -162,13 +160,15 @@ function App() {
         });
 
         // Add points for map
-        points.push({
-          id: voteId,
-          lat: item.lat,
-          lng: item.lng,
-          color: voteColor,
-          intensity: 1
-        });
+        if (item.lat && item.lng) {  // Only add points if coordinates exist
+          points.push({
+            id: voteId,
+            lat: item.lat,
+            lng: item.lng,
+            color: voteColor,
+            intensity: 1
+          });
+        }
       });
 
       // Add links between same ZIP codes
@@ -249,7 +249,7 @@ function App() {
         lng: coords.lng
       };
 
-      const apiResponse = await fetch('/api/responses', {
+      const apiResponse = await fetch('/responses', {  // Updated endpoint
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -269,7 +269,7 @@ function App() {
   // Function to reset all data
   const resetData = async () => {
     try {
-      const response = await fetch('/api/responses', {
+      const response = await fetch('/responses', {  // Updated endpoint
         method: 'DELETE'
       });
       if (!response.ok) {
