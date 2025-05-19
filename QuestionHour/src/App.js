@@ -4,10 +4,7 @@ import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
-
-
-
-
+import { api } from './services/api';
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -18,46 +15,14 @@ L.Icon.Default.mergeOptions({
 });
 
 function App() {
-  const [graphData, setGraphData] = useState(() => {
-    // Load initial data from localStorage or use default
-    const savedData = localStorage.getItem('graphData');
-    if (savedData) {
-      const parsedData = JSON.parse(savedData);
-      // Ensure links have proper source and target references
-      const nodes = parsedData.nodes || [];
-      const links = parsedData.links || [];
-      return {
-        nodes,
-        links: links.map(link => ({
-          ...link,
-          source: typeof link.source === 'string' ? link.source : nodes.find(n => n.id === link.source.id) || link.source,
-          target: typeof link.target === 'string' ? link.target : nodes.find(n => n.id === link.target.id) || link.target
-        }))
-      };
-    }
-    return {
-      nodes: [
-        { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
-      ],
-      links: []
-    };
+  const [graphData, setGraphData] = useState({
+    nodes: [
+      { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
+    ],
+    links: []
   });
   
-  const [mapPoints, setMapPoints] = useState(() => {
-    // Load map points from localStorage or use empty array
-    const savedPoints = localStorage.getItem('mapPoints');
-    return savedPoints ? JSON.parse(savedPoints) : [];
-  });
-
-  // Save data to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('graphData', JSON.stringify(graphData));
-  }, [graphData]);
-
-  useEffect(() => {
-    localStorage.setItem('mapPoints', JSON.stringify(mapPoints));
-  }, [mapPoints]);
-
+  const [mapPoints, setMapPoints] = useState([]);
   const [zipCode, setZipCode] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -79,7 +44,9 @@ function App() {
           lat: location.lat,
           lng: location.lng
         };
-      } 
+      } else {
+        throw new Error('Could not find coordinates for ZIP code');
+      }
     } catch (error) {
       console.error('Error geocoding ZIP code:', error);
       throw error;
@@ -89,7 +56,6 @@ function App() {
   // Function to reset zoom and center network
   const resetZoom = useCallback(() => {
     if (fgRef.current) {
-      // Center the network in its container
       const containerWidth = networkContainerRef.current?.offsetWidth || 800;
       const containerHeight = networkContainerRef.current?.offsetHeight || 600;
       
@@ -115,101 +81,67 @@ function App() {
     }
   }, []);
 
-  // Function to fetch all responses from the server
-  const fetchResponses = async () => {
+  // Function to fetch and update visualization data
+  const updateVisualization = useCallback(async () => {
     try {
-      const response = await fetch('/responses');  // Updated endpoint
-      if (!response.ok) {
-        throw new Error('Failed to fetch responses');
-      }
-      const data = await response.json();
+      const responses = await api.getResponses();
       
-      // Convert server data to graph format
+      // Convert responses to graph data
       const nodes = [
         { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
       ];
       const links = [];
       const points = [];
 
-      data.forEach((item, index) => {
-        const voteId = `vote-${item.location}-${item.timestamp}`;
-        const voteColor = item.response === "agree" ? "green" : "red";
-        
-        // Calculate node position
-        const angle = (index / data.length) * Math.PI * 2;
+      // Create nodes and links
+      responses.forEach((response, index) => {
+        const nodeId = `response-${index}`;
+        const angle = Math.random() * Math.PI * 2;
         const radius = 100;
-        const newX = Math.cos(angle) * radius;
-        const newY = Math.sin(angle) * radius;
-        const newZ = (Math.random() - 0.5) * 50;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        const z = (Math.random() - 0.5) * 50;
 
         nodes.push({
-          id: voteId,
-          name: `ZIP: ${item.location}`,
-          color: voteColor,
-          x: newX,
-          y: newY,
-          z: newZ
+          id: nodeId,
+          name: `ZIP: ${response.location}`,
+          color: response.response === 'agree' ? 'green' : 'red',
+          x,
+          y,
+          z
         });
 
         // Add link to question
         links.push({
           source: 'question',
-          target: voteId,
-          color: voteColor,
+          target: nodeId,
+          color: response.response === 'agree' ? 'green' : 'red',
           width: 4
         });
 
-        // Add points for map
-        if (item.lat && item.lng) {  // Only add points if coordinates exist
-          points.push({
-            id: voteId,
-            lat: item.lat,
-            lng: item.lng,
-            color: voteColor,
-            intensity: 1
-          });
-        }
-      });
-
-      // Add links between same ZIP codes
-      const zipGroups = {};
-      nodes.forEach(node => {
-        if (node.id !== 'question') {
-          const zip = node.id.split('-')[1];
-          if (!zipGroups[zip]) {
-            zipGroups[zip] = [];
-          }
-          zipGroups[zip].push(node);
-        }
-      });
-
-      Object.values(zipGroups).forEach(group => {
-        for (let i = 0; i < group.length; i++) {
-          for (let j = i + 1; j < group.length; j++) {
-            links.push({
-              source: group[i].id,
-              target: group[j].id,
-              color: 'purple',
-              width: 4
-            });
-          }
-        }
+        points.push({
+          id: nodeId,
+          lat: response.lat,
+          lng: response.lng,
+          color: response.response === 'agree' ? 'green' : 'red',
+          intensity: 1
+        });
       });
 
       setGraphData({ nodes, links });
       setMapPoints(points);
     } catch (error) {
-      console.error('Error fetching responses:', error);
-      setError('Failed to load responses from server');
+      console.error('Error updating visualization:', error);
+      setError('Failed to update visualization');
     }
-  };
-
-  // Fetch responses when component mounts
-  useEffect(() => {
-    fetchResponses();
   }, []);
 
-  // Add a new vote node
+  // Load initial data
+  useEffect(() => {
+    updateVisualization();
+  }, [updateVisualization]);
+
+  // Add a new vote
   async function addVote(sentiment) {
     if (!zipCode) {
       setError("Please enter your ZIP code first.");
@@ -218,64 +150,35 @@ function App() {
 
     try {
       const coords = await getCoordinatesFromZip(zipCode);
-      const voteId = `vote-${zipCode}-${Date.now()}`;
-      const voteColor = sentiment === "agree" ? "green" : "red";
       
-      // Store response on server
-      await storeResponse(sentiment);
-      
-      // Fetch updated responses
-      await fetchResponses();
+      // Store in backend first
+      await api.addResponse({
+        question: "You have been stung by a bee.",
+        response: sentiment,
+        timestamp: new Date().toISOString(),
+        location: zipCode,
+        lat: coords.lat,
+        lng: coords.lng
+      });
 
+      // Update visualization from backend data
+      await updateVisualization();
+      
       setSuccessMessage(`Vote recorded for ZIP code ${zipCode}!`);
       setTimeout(() => setSuccessMessage(''), 3000);
       setZipCode('');
       setTimeout(() => resetZoom(), 500);
     } catch (error) {
-      setError("Could not find location for this ZIP code. Please try again.");
+      setError("Could not record vote. Please try again.");
       console.error('Error adding vote:', error);
     }
   }
 
-  const storeResponse = async (response) => {
-    try {
-      const coords = await getCoordinatesFromZip(zipCode);
-      const responseData = {
-        question: "You have been stung by a bee.",
-        response: response,
-        timestamp: new Date().toISOString(),
-        location: zipCode,
-        lat: coords.lat,
-        lng: coords.lng
-      };
-
-      const apiResponse = await fetch('/responses', {  // Updated endpoint
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(responseData)
-      });
-
-      if (!apiResponse.ok) {
-        throw new Error('Failed to store response');
-      }
-    } catch (error) {
-      console.error('Error storing response:', error);
-      throw error;
-    }
-  };
-
   // Function to reset all data
   const resetData = async () => {
     try {
-      const response = await fetch('/responses', {  // Updated endpoint
-        method: 'DELETE'
-      });
-      if (!response.ok) {
-        throw new Error('Failed to reset data');
-      }
-      await fetchResponses();
+      await api.resetData();
+      await updateVisualization();
       setSuccessMessage('All data has been reset!');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
@@ -348,7 +251,6 @@ function App() {
           />
         </div>
         <div className="map-visualization">
-
           <MapContainer
             ref={mapRef}
             center={[37.0902, -95.7129]}
@@ -363,7 +265,6 @@ function App() {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             />
             {mapPoints.map(point => (
-              //  <HeatmapLayer points={mapPoints} />
               <CircleMarker
                 key={point.id}
                 center={[point.lat, point.lng]}
@@ -382,63 +283,3 @@ function App() {
 }
 
 export default App;
-// import React, { useState } from "react";
-// import { motion } from "framer-motion";
-// import ForceGraph3D from "react-force-graph-3d";
-// import { MapContainer, TileLayer, CircleMarker } from "react-leaflet";
-// import "leaflet/dist/leaflet.css";
-// import "./RotatingCard.css";
-
-// const RotatingCard = ({ graphData, mapPoints }) => {
-//   const [side, setSide] = useState(0);
-
-//   const handleClick = () => {
-//     setSide((prev) => (prev + 1) % 3);
-//   };
-
-//   return (
-//     <motion.div
-//       className="card-container"
-//       animate={{ rotateY: side * 120 }}
-//       transition={{ duration: 0.8 }}
-//       onClick={handleClick}
-//     >
-//       <div className="card-face card-question">
-//         <div className="peel-corner top-left"></div>
-//         <div className="peel-corner top-right"></div>
-//         <div className="peel-corner bottom-left"></div>
-//         <div className="peel-corner bottom-right"></div>
-//         <h2>Is the current political climate benefiting my line of work?</h2>
-//       </div>
-//       <div className="card-face card-network">
-//         <div className="peel-corner top-left"></div>
-//         <div className="peel-corner top-right"></div>
-//         <div className="peel-corner bottom-left"></div>
-//         <div className="peel-corner bottom-right"></div>
-//         <ForceGraph3D graphData={graphData} nodeAutoColorBy="color" />
-//       </div>
-//       <div className="card-face card-map">
-//         <div className="peel-corner top-left"></div>
-//         <div className="peel-corner top-right"></div>
-//         <div className="peel-corner bottom-left"></div>
-//         <div className="peel-corner bottom-right"></div>
-//         <MapContainer center={[37.0902, -95.7129]} zoom={4} className="map-container">
-//           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-//           {mapPoints.map((point) => (
-//             <CircleMarker
-//               key={point.id}
-//               center={[point.lat, point.lng]}
-//               radius={10}
-//               fillColor={point.color}
-//               color="#fff"
-//               weight={1}
-//               fillOpacity={0.7}
-//             />
-//           ))}
-//         </MapContainer>
-//       </div>
-//     </motion.div>
-//   );
-// };
-
-// export default RotatingCard;
