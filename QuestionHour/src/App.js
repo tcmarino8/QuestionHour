@@ -1,7 +1,7 @@
 import './App.css';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
-import { MapContainer, TileLayer, CircleMarker } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
 import { api } from './services/api';
@@ -84,7 +84,9 @@ function App() {
   // Function to fetch and update visualization data
   const updateVisualization = useCallback(async () => {
     try {
+      console.log('Fetching responses from backend...');
       const responses = await api.getResponses();
+      console.log('Received responses:', responses);
       
       // Convert responses to graph data
       const nodes = [
@@ -93,8 +95,27 @@ function App() {
       const links = [];
       const points = [];
 
+      // Group responses by ZIP code for map statistics
+      const zipStats = {};
+      responses.forEach(response => {
+        if (!zipStats[response.location]) {
+          zipStats[response.location] = {
+            agree: 0,
+            disagree: 0,
+            lat: response.lat,
+            lng: response.lng
+          };
+        }
+        if (response.response === 'agree') {
+          zipStats[response.location].agree++;
+        } else {
+          zipStats[response.location].disagree++;
+        }
+      });
+
       // Create nodes and links
       responses.forEach((response, index) => {
+        // console.log('Processing response:', response);
         const nodeId = `response-${index}`;
         const angle = Math.random() * Math.PI * 2;
         const radius = 100;
@@ -102,31 +123,47 @@ function App() {
         const y = Math.sin(angle) * radius;
         const z = (Math.random() - 0.5) * 50;
 
-        nodes.push({
+        const node = {
           id: nodeId,
           name: `ZIP: ${response.location}`,
           color: response.response === 'agree' ? 'green' : 'red',
           x,
           y,
           z
-        });
+        };
+        // console.log('Created node:', node);
+        nodes.push(node);
 
         // Add link to question
-        links.push({
+        const link = {
           source: 'question',
           target: nodeId,
           color: response.response === 'agree' ? 'green' : 'red',
           width: 4
-        });
-
-        points.push({
-          id: nodeId,
-          lat: response.lat,
-          lng: response.lng,
-          color: response.response === 'agree' ? 'green' : 'red',
-          intensity: 1
-        });
+        };
+        // console.log('Created link:', link);
+        links.push(link);
       });
+
+      // Create map points with statistics
+      Object.entries(zipStats).forEach(([zip, stats]) => {
+        const point = {
+          id: `zip-${zip}`,
+          lat: stats.lat,
+          lng: stats.lng,
+          color: stats.agree >= stats.disagree ? 'green' : 'red',
+          stats: {
+            agree: stats.agree,
+            disagree: stats.disagree,
+            total: stats.agree + stats.disagree
+          }
+        };
+        console.log('Created map point:', point);
+        points.push(point);
+      });
+
+      // console.log('Final graph data:', { nodes, links });
+      // console.log('Final map points:', points);
 
       setGraphData({ nodes, links });
       setMapPoints(points);
@@ -268,12 +305,26 @@ function App() {
               <CircleMarker
                 key={point.id}
                 center={[point.lat, point.lng]}
-                radius={10}
+                radius={Math.min(5 + point.stats.total, 30)}
                 fillColor={point.color}
                 color="#fff"
                 weight={1}
                 fillOpacity={0.7}
-              />
+              >
+                <Popup>
+                  <div style={{
+                    padding: '10px',
+                    textAlign: 'center'
+                  }}>
+                    <h3 style={{ margin: '0 0 10px 0' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
+                      <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
+                    </div>
+                    <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
+                  </div>
+                </Popup>
+              </CircleMarker>
             ))}
           </MapContainer>
         </div>

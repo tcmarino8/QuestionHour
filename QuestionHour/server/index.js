@@ -26,14 +26,14 @@ try {
 async function runQuery(query, params = {}) {
   const session = driver.session();
   try {
-    console.log('Executing Neo4j query:', query);
-    console.log('With parameters:', params);
+    // console.log('Executing Neo4j query:', query);
+    // console.log('With parameters:', params);
     const result = await session.run(query, params);
-    console.log('Query result summary:', result.summary);
-    console.log('Number of records returned:', result.records.length);
-    if (result.records.length > 0) {
-      console.log('First record:', result.records[0].toObject());
-    }
+    // console.log('Query result summary:', result.summary);
+    // console.log('Number of records returned:', result.records.length);
+    // if (result.records.length > 0) {
+    //   console.log('First record:', result.records[0].toObject());
+    // }
     return result.records;
   } catch (error) {
     console.error('Neo4j query error:', error);
@@ -77,7 +77,7 @@ app.get('/api/responses', async (req, res) => {
 // Add a new response
 app.post('/api/responses', async (req, res) => {
   try {
-    console.log('Received POST request with body:', req.body);
+    // console.log('Received POST request with body:', req.body);
     
     // Validate request body
     validateResponseBody(req.body);
@@ -131,7 +131,7 @@ app.post('/api/responses', async (req, res) => {
     await runQuery(zipQuery, { location });
     
     const responseData = responseResult[0].get('r').properties;
-    console.log('Sending response data:', responseData);
+    // console.log('Sending response data:', responseData);
     res.json(responseData);
   } catch (error) {
     console.error('Error adding response:', error);
