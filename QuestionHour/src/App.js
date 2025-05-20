@@ -29,6 +29,7 @@ function App() {
   const fgRef = useRef(null);
   const mapRef = useRef(null);
   const networkContainerRef = useRef(null);
+  const markerRefs = useRef({});
 
   // Function to get coordinates from ZIP code using Google Places API
   const getCoordinatesFromZip = async (zip) => {
@@ -65,6 +66,11 @@ function App() {
         1500
       );
     }
+
+    // Reset map view
+    if (mapRef.current) {
+      mapRef.current.setView([37.0902, -95.7129], 3);
+    }
   }, []);
 
   // Handle node click
@@ -78,6 +84,17 @@ function App() {
         node,
         3000
       );
+
+      // If the node has a location (not the question node), show the corresponding map popup
+      if (node.name && node.name.startsWith('ZIP:')) {
+        const zip = node.name.replace('ZIP: ', '');
+        const markerRef = markerRefs.current[`zip-${zip}`];
+        if (markerRef) {
+          markerRef.openPopup();
+          // Center map on the marker
+          mapRef.current.setView([markerRef.getLatLng().lat, markerRef.getLatLng().lng], 8);
+        }
+      }
     }
   }, []);
 
@@ -310,6 +327,16 @@ function App() {
                 color="#fff"
                 weight={1}
                 fillOpacity={0.7}
+                ref={ref => {
+                  if (ref) {
+                    markerRefs.current[point.id] = ref;
+                  }
+                }}
+                eventHandlers={{
+                  click: () => {
+                    mapRef.current.setView([point.lat, point.lng], 10);
+                  }
+                }}
               >
                 <Popup>
                   <div style={{
