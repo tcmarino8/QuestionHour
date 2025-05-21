@@ -23,35 +23,86 @@ function App() {
   });
   
   const [mapPoints, setMapPoints] = useState([]);
-  const [zipCode, setZipCode] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showInfoPopup, setShowInfoPopup] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
   const fgRef = useRef(null);
   const mapRef = useRef(null);
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
 
-  // Function to get coordinates from ZIP code using Google Places API
-  const getCoordinatesFromZip = async (zip) => {
+  // Function to get ZIP code from coordinates using Google Places API
+  const getZipFromCoordinates = async (lat, lng) => {
     try {
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${zip}&key=AIzaSyCRwTIg_AYz2gPW8QTHFv0whcE4ruXi_ns`
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=AIzaSyCRwTIg_AYz2gPW8QTHFv0whcE4ruXi_ns`
       );
       const data = await response.json();
       
       if (data.status === 'OK' && data.results.length > 0) {
-        const location = data.results[0].geometry.location;
-        return {
-          lat: location.lat,
-          lng: location.lng
-        };
-      } else {
-        throw new Error('Could not find coordinates for ZIP code');
+        // Find the ZIP code in the address components
+        const addressComponents = data.results[0].address_components;
+        const zipComponent = addressComponents.find(
+          component => component.types.includes('postal_code')
+        );
+        return zipComponent ? zipComponent.long_name : null;
       }
+      return null;
     } catch (error) {
-      console.error('Error geocoding ZIP code:', error);
-      throw error;
+      console.error('Error getting ZIP code:', error);
+      return null;
     }
+  };
+
+  // Function to get user's location
+  const getLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by your browser");
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const zipCode = await getZipFromCoordinates(latitude, longitude);
+          
+          if (!zipCode) {
+            setError("Could not determine ZIP code from your location");
+            setIsLoading(false);
+            return;
+          }
+
+          setUserLocation({
+            lat: latitude,
+            lng: longitude,
+            zip: zipCode
+          });
+          setSuccessMessage('Location found! You can now vote.');
+          setTimeout(() => setSuccessMessage(''), 3000);
+        } catch (error) {
+          console.error('Error in location handling:', error);
+          setError("Could not get your location. Please try again.");
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setError("Could not get your location. Please check your browser settings.");
+        setIsLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
+    );
   };
 
   // Function to reset zoom and center network
@@ -197,34 +248,29 @@ function App() {
 
   // Add a new vote
   async function addVote(sentiment) {
-    if (!zipCode) {
-      setError("Please enter your ZIP code first.");
+    if (!userLocation) {
+      setError("Please get your location first");
       return;
     }
 
     try {
-      const coords = await getCoordinatesFromZip(zipCode);
-      
-      // Store in backend first
-      await api.addResponse({
+      // Store in backend
+      const response = await api.addResponse({
         question: "You have been stung by a bee.",
         response: sentiment,
         timestamp: new Date().toISOString(),
-        location: zipCode,
-        lat: coords.lat,
-        lng: coords.lng
+        location: userLocation.zip,
+        lat: userLocation.lat,
+        lng: userLocation.lng
       });
 
-      // Update visualization from backend data
       await updateVisualization();
-      
-      setSuccessMessage(`Vote recorded for ZIP code ${zipCode}!`);
+      setSuccessMessage('Vote recorded!');
       setTimeout(() => setSuccessMessage(''), 3000);
-      setZipCode('');
       setTimeout(() => resetZoom(), 500);
     } catch (error) {
-      setError("Could not record vote. Please try again.");
       console.error('Error adding vote:', error);
+      setError("Could not record vote. Please try again.");
     }
   }
 
@@ -257,31 +303,131 @@ function App() {
       }}>
         Question of the Day: I have been stung by a bee...
       </div>
-      <div className="controls">
-        <input
-          type="text"
-          placeholder="Enter ZIP code"
-          value={zipCode}
-          onChange={(e) => setZipCode(e.target.value)}
-          maxLength="5"
-          pattern="[0-9]*"
-        />
-        <button onClick={() => addVote("agree")} style={{ backgroundColor: "green", margin: '5px', padding: '10px' }}>
+      <div className="controls" style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '10px',
+        margin: '20px 0',
+        flexWrap: 'wrap'
+      }}>
+        <button 
+          onClick={getLocation}
+          style={{ 
+            backgroundColor: "#007bff",
+            padding: '10px 20px',
+            borderRadius: '5px',
+            border: 'none',
+            color: 'white',
+            cursor: 'pointer',
+            opacity: isLoading ? 0.7 : 1
+          }}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Getting Location...' : 'Get My Location'}
+        </button>
+        <button 
+          onClick={() => addVote("agree")} 
+          style={{ 
+            backgroundColor: "green", 
+            padding: '10px 20px',
+            borderRadius: '5px',
+            border: 'none',
+            color: 'white',
+            cursor: 'pointer',
+            opacity: !userLocation ? 0.5 : 1
+          }}
+          disabled={!userLocation}
+        >
           Agree
         </button>
-        <button onClick={() => addVote("disagree")} style={{ backgroundColor: "red", margin: '5px', padding: '10px' }}>
+        <button 
+          onClick={() => addVote("disagree")} 
+          style={{ 
+            backgroundColor: "red", 
+            padding: '10px 20px',
+            borderRadius: '5px',
+            border: 'none',
+            color: 'white',
+            cursor: 'pointer',
+            opacity: !userLocation ? 0.5 : 1
+          }}
+          disabled={!userLocation}
+        >
           Disagree
         </button>
-        <button onClick={resetZoom} style={{ margin: '5px', padding: '10px' }}>
+        <button 
+          onClick={resetZoom} 
+          style={{ 
+            padding: '10px 20px',
+            borderRadius: '5px',
+            border: '1px solid #ccc',
+            cursor: 'pointer'
+          }}
+        >
           Reset View
         </button>
-        <button onClick={resetData} style={{ backgroundColor: "#ff4444", margin: '5px', padding: '10px' }}>
+        <button 
+          onClick={resetData} 
+          style={{ 
+            backgroundColor: "#ff4444", 
+            padding: '10px 20px',
+            borderRadius: '5px',
+            border: 'none',
+            color: 'white',
+            cursor: 'pointer'
+          }}
+        >
           Reset All Data
+        </button>
+        <button 
+          onClick={() => setShowInfoPopup(true)}
+          style={{ 
+            padding: '10px 20px',
+            borderRadius: '5px',
+            border: '1px solid #ccc',
+            cursor: 'pointer',
+            backgroundColor: '#f0f0f0'
+          }}
+        >
+          Why do you need my location?
         </button>
       </div>
       
-      {error && <p className="error">{error}</p>}
-      {successMessage && <p className="success">{successMessage}</p>}
+      {error && <p className="error" style={{ color: 'red', textAlign: 'center' }}>{error}</p>}
+      {successMessage && <p className="success" style={{ color: 'green', textAlign: 'center' }}>{successMessage}</p>}
+      {isLoading && <p style={{ textAlign: 'center' }}>Getting your location...</p>}
+
+      {showInfoPopup && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: 'white',
+          padding: '20px',
+          borderRadius: '10px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          zIndex: 1000,
+          maxWidth: '400px',
+          textAlign: 'center'
+        }}>
+          <p style={{ marginBottom: '20px' }}>We just want to show where people are who are responding a certain way!</p>
+          <button 
+            onClick={() => setShowInfoPopup(false)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '5px',
+              border: 'none',
+              backgroundColor: '#007bff',
+              color: 'white',
+              cursor: 'pointer'
+            }}
+          >
+            Got it!
+          </button>
+        </div>
+      )}
 
       <div className="visualization-container">
         <div className="network-visualization" ref={networkContainerRef}>
