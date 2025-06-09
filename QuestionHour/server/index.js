@@ -12,11 +12,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Neo4j connection
 let driver;
 try {
-  if (!process.env.NEO4J_URI || !process.env.NEO4J_USER || !process.env.NEO4J_PASSWORD) {
-    console.error('Missing Neo4j environment variables');
-    throw new Error('Missing Neo4j environment variables');
-  }
-  
   driver = neo4j.driver(
     process.env.NEO4J_URI,
     neo4j.auth.basic(process.env.NEO4J_USER, process.env.NEO4J_PASSWORD)
@@ -24,10 +19,7 @@ try {
   console.log('Neo4j connection established successfully');
 } catch (error) {
   console.error('Failed to create Neo4j driver:', error);
-  // Don't exit process in serverless environment
-  if (require.main === module) {
-    process.exit(1);
-  }
+  process.exit(1);
 }
 
 // Helper function to run Neo4j queries
@@ -174,13 +166,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Export the Express API
-module.exports = app;
-
-// Only start the server if this file is run directly
-if (require.main === module) {
-  const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-} 
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+}); 

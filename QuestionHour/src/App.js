@@ -65,14 +65,6 @@ function App() {
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
 
-  // Add a test state
-  const [testState, setTestState] = useState('Initial State');
-  
-  // Test effect
-  useEffect(() => {
-    console.log('App mounted');
-    setTestState('Mounted State');
-  }, []);
 
   // Function to get ZIP code from coordinates using Google Places API
   const getZipFromCoordinates = async (lat, lng) => {
@@ -330,8 +322,6 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Test Header</h1>
-      <p>Test State: {testState}</p>
       <div className="question-box" style={{
         margin: '30px auto 10px auto',
         padding: '20px',
@@ -402,6 +392,8 @@ function App() {
         <button 
           onClick={resetZoom} 
           style={{ 
+            backgroundColor: 'black',
+
             padding: '10px 20px',
             borderRadius: '5px',
             border: '1px solid #ccc',
@@ -430,7 +422,7 @@ function App() {
             borderRadius: '5px',
             border: '1px solid #ccc',
             cursor: 'pointer',
-            backgroundColor: '#f0f0f0'
+            backgroundColor: 'black'
           }}
         >
           Why do you need my location?
