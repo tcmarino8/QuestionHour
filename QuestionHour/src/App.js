@@ -255,7 +255,7 @@ function App() {
 
     try {
       // Store in backend
-      const response = await api.addResponse({
+      await api.addResponse({
         question: "You have been stung by a bee.",
         response: sentiment,
         timestamp: new Date().toISOString(),
