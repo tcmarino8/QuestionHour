@@ -65,6 +65,15 @@ function App() {
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
 
+  // Add a test state
+  const [testState, setTestState] = useState('Initial State');
+  
+  // Test effect
+  useEffect(() => {
+    console.log('App mounted');
+    setTestState('Mounted State');
+  }, []);
+
   // Function to get ZIP code from coordinates using Google Places API
   const getZipFromCoordinates = async (lat, lng) => {
     try {
@@ -321,6 +330,8 @@ function App() {
 
   return (
     <div className="App">
+      <h1>Test Header</h1>
+      <p>Test State: {testState}</p>
       <div className="question-box" style={{
         margin: '30px auto 10px auto',
         padding: '20px',
