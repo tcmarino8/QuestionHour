@@ -6,8 +6,10 @@ console.log('Environment:', process.env.NODE_ENV);
 console.log('API Base URL:', API_BASE_URL);
 
 const handleResponse = async (response) => {
+  console.log('API Response status:', response.status);
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
+    console.error('API Error:', error);
     throw new Error(error.message || 'Something went wrong');
   }
   return response.json();
@@ -16,33 +18,57 @@ const handleResponse = async (response) => {
 export const api = {
   // Get all responses
   getResponses: async () => {
-    const response = await fetch(`${API_BASE_URL}/api/responses`);
-    return handleResponse(response);
+    console.log('Fetching responses from:', `${API_BASE_URL}/api/responses`);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/responses`);
+      return handleResponse(response);
+    } catch (error) {
+      console.error('Error in getResponses:', error);
+      throw error;
+    }
   },
 
   // Add a new response
   addResponse: async (data) => {
-    const response = await fetch(`${API_BASE_URL}/api/responses`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    return handleResponse(response);
+    console.log('Adding response to:', `${API_BASE_URL}/api/responses`, data);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/responses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      return handleResponse(response);
+    } catch (error) {
+      console.error('Error in addResponse:', error);
+      throw error;
+    }
   },
 
   // Reset all data
   resetData: async () => {
-    const response = await fetch(`${API_BASE_URL}/api/responses`, {
-      method: 'DELETE',
-    });
-    return handleResponse(response);
+    console.log('Resetting data at:', `${API_BASE_URL}/api/responses`);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/responses`, {
+        method: 'DELETE',
+      });
+      return handleResponse(response);
+    } catch (error) {
+      console.error('Error in resetData:', error);
+      throw error;
+    }
   },
 
   // Check server health
   checkHealth: async () => {
-    const response = await fetch(`${API_BASE_URL}/api/health`);
-    return handleResponse(response);
+    console.log('Checking health at:', `${API_BASE_URL}/api/health`);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/health`);
+      return handleResponse(response);
+    } catch (error) {
+      console.error('Error in checkHealth:', error);
+      throw error;
+    }
   },
 }; 

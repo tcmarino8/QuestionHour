@@ -14,7 +14,39 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
+// Error Boundary Component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <h2>Something went wrong.</h2>
+          <pre style={{ textAlign: 'left', background: '#f5f5f5', padding: '10px' }}>
+            {this.state.error?.toString()}
+          </pre>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function App() {
+  console.log('App component rendering');
   const [graphData, setGraphData] = useState({
     nodes: [
       { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
@@ -506,4 +538,11 @@ function App() {
   );
 }
 
-export default App;
+// Wrap the App export with ErrorBoundary
+export default function AppWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
