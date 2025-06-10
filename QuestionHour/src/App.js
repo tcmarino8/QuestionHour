@@ -4,7 +4,7 @@ import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
-import { api, CURRENT_QUESTION } from './services/api';
+import { api, CURRENT_QUESTION, QUESTION_THEME, THEME_COLOR } from './services/api';
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -49,7 +49,15 @@ function App() {
   console.log('App component rendering');
   const [graphData, setGraphData] = useState({
     nodes: [
-      { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
+      { 
+        id: 'question', 
+        name: `Question: ${CURRENT_QUESTION}`, 
+        color: THEME_COLOR, 
+        x: 0, 
+        y: 0, 
+        z: 0,
+        theme: QUESTION_THEME
+      }
     ],
     links: []
   });
@@ -191,7 +199,15 @@ function App() {
       
       // Convert responses to graph data
       const nodes = [
-        { id: 'question', name: 'Questionhour', color: 'blue', x: 0, y: 0, z: 0 }
+        { 
+          id: 'question', 
+          name: `Question: ${CURRENT_QUESTION}`, 
+          color: THEME_COLOR, 
+          x: 0, 
+          y: 0, 
+          z: 0,
+          theme: QUESTION_THEME
+        }
       ];
       const links = [];
       const points = [];
@@ -334,6 +350,9 @@ function App() {
         textAlign: 'center',
         color: '#333'
       }}>
+        {/* <div style={{ color: THEME_COLOR, marginBottom: '10px' }}>
+          Theme: {QUESTION_THEME.charAt(0).toUpperCase() + QUESTION_THEME.slice(1)}
+        </div> */}
         Question of the Day: {CURRENT_QUESTION}
       </div>
       <div className="controls" style={{
