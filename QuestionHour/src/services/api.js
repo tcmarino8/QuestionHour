@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.NODE_ENV === 'production'
 
 export const CURRENT_QUESTION = "I have driven in a car today!";
 export const QUESTION_THEME = "transportation";
-export const THEME_COLOR = "#4CAF50"
+export const THEME_COLOR = "#5e6ffb"
 
 console.log('Environment:', process.env.NODE_ENV);
 console.log('API Base URL:', API_BASE_URL);
