@@ -4,7 +4,7 @@ import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
-import { api } from './services/api';
+import { api, CURRENT_QUESTION } from './services/api';
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -289,7 +289,7 @@ function App() {
     try {
       // Store in backend
       await api.addResponse({
-        question: "You have been stung by a bee.",
+        question: CURRENT_QUESTION,
         response: sentiment,
         timestamp: new Date().toISOString(),
         location: userLocation.zip,
@@ -334,7 +334,7 @@ function App() {
         textAlign: 'center',
         color: '#333'
       }}>
-        Question of the Day: I have been stung by a bee...
+        Question of the Day: {CURRENT_QUESTION}
       </div>
       <div className="controls" style={{
         display: 'flex',

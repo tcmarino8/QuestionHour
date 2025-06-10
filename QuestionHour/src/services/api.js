@@ -2,6 +2,8 @@ const API_BASE_URL = process.env.NODE_ENV === 'production'
   ? 'https://question-hour.vercel.app'  // Replace with your actual Vercel URL
   : 'http://localhost:3001';
 
+export const CURRENT_QUESTION = "I have driven in a car today!";
+
 console.log('Environment:', process.env.NODE_ENV);
 console.log('API Base URL:', API_BASE_URL);
 
