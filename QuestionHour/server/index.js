@@ -77,16 +77,13 @@ app.get('/api/responses', async (req, res) => {
 // Add a new response
 app.post('/api/responses', async (req, res) => {
   try {
-    // console.log('Received POST request with body:', req.body);
-    
-    // Validate request body
-    validateResponseBody(req.body);
-    
     const { question, response, timestamp, location, lat, lng } = req.body;
     
-    // First, ensure the question exists
+    // First, ensure the question exists with its properties
     const questionQuery = `
       MERGE (q:Question {text: $question})
+      SET q.current = true,
+          q.timestamp = datetime()
       RETURN q
     `;
     console.log('Creating/merging question node...');
@@ -131,7 +128,6 @@ app.post('/api/responses', async (req, res) => {
     await runQuery(zipQuery, { location });
     
     const responseData = responseResult[0].get('r').properties;
-    // console.log('Sending response data:', responseData);
     res.json(responseData);
   } catch (error) {
     console.error('Error adding response:', error);
@@ -157,13 +153,111 @@ app.delete('/api/responses', async (req, res) => {
   }
 });
 
-// Routes
-app.get('/', (req, res) => {
-  res.send('Server is running');
+// Get current question
+app.get('/api/questions/current', async (req, res) => {
+  console.log('GET /api/questions/current - Request received');
+  try {
+    const query = `
+      MATCH (q:Question {current: true})
+      RETURN q
+    `;
+    
+    console.log('Executing query to find current question');
+    const result = await runQuery(query);
+    console.log('Query result:', result);
+    
+    if (result.length === 0) {
+      console.log('No current question found');
+      return res.status(404).json({ error: 'No current question found' });
+    }
+    
+    const questionData = result[0].get('q').properties;
+    console.log('Returning question data:', questionData);
+    res.json(questionData);
+  } catch (error) {
+    console.error('Error fetching current question:', error);
+    res.status(500).json({ error: 'Failed to fetch current question' });
+  }
 });
 
+// Set new current question
+app.post('/api/questions/current', async (req, res) => {
+  console.log('POST /api/questions/current - Request received');
+  console.log('Request body:', req.body);
+  
+  try {
+    const { text, theme } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ error: 'Question text is required' });
+    }
+    
+    // First, archive the current question if it exists
+    const archiveQuery = `
+      MATCH (q:Question {current: true})
+      SET q.current = false,
+          q.archivedAt = datetime()
+      RETURN q
+    `;
+    console.log('Archiving current question');
+    const archivedQuestion = await runQuery(archiveQuery);
+    if (archivedQuestion.length > 0) {
+      console.log('Archived question:', archivedQuestion[0].get('q').properties);
+    }
+    
+    // Then create or update the new current question
+    const createQuery = `
+      MERGE (q:Question {text: $text})
+      SET q.current = true,
+          q.theme = $theme,
+          q.timestamp = datetime()
+      RETURN q
+    `;
+    
+    console.log('Creating/updating new current question');
+    const result = await runQuery(createQuery, { text, theme });
+    console.log('Query result:', result);
+    
+    const questionData = result[0].get('q').properties;
+    console.log('Returning question data:', questionData);
+    res.json(questionData);
+  } catch (error) {
+    console.error('Error setting current question:', error);
+    res.status(500).json({ error: 'Failed to set current question' });
+  }
+});
+
+// Get question history
+app.get('/api/questions/history', async (req, res) => {
+  console.log('GET /api/questions/history - Request received');
+  try {
+    const query = `
+      MATCH (q:Question)
+      WHERE q.archivedAt IS NOT NULL
+      RETURN q
+      ORDER BY q.archivedAt DESC
+    `;
+    
+    console.log('Fetching question history');
+    const result = await runQuery(query);
+    console.log('Found', result.length, 'archived questions');
+    
+    const history = result.map(record => record.get('q').properties);
+    res.json(history);
+  } catch (error) {
+    console.error('Error fetching question history:', error);
+    res.status(500).json({ error: 'Failed to fetch question history' });
+  }
+});
+
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Catch-all route - MUST BE LAST
+app.get('/', (req, res) => {
+  res.send('Server is running');
 });
 
 const PORT = process.env.PORT || 3001;
