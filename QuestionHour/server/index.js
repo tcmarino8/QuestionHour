@@ -195,8 +195,17 @@ app.post('/api/questions/current', async (req, res) => {
     // First, archive the current question if it exists
     const archiveQuery = `
       MATCH (q:Question {current: true})
+      WITH q
+      OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
+      WITH q, 
+           count(r) as totalResponses,
+           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'agree'}) | r]) as agreeCount,
+           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'disagree'}) | r]) as disagreeCount
       SET q.current = false,
-          q.archivedAt = datetime()
+          q.archivedAt = datetime(),
+          q.totalResponses = totalResponses,
+          q.agreeCount = agreeCount,
+          q.disagreeCount = disagreeCount
       RETURN q
     `;
     console.log('Archiving current question');
@@ -210,7 +219,10 @@ app.post('/api/questions/current', async (req, res) => {
       MERGE (q:Question {text: $text})
       SET q.current = true,
           q.theme = $theme,
-          q.timestamp = datetime()
+          q.timestamp = datetime(),
+          q.totalResponses = 0,
+          q.agreeCount = 0,
+          q.disagreeCount = 0
       RETURN q
     `;
     
@@ -227,26 +239,77 @@ app.post('/api/questions/current', async (req, res) => {
   }
 });
 
-// Get question history
+// Get question history with detailed statistics
 app.get('/api/questions/history', async (req, res) => {
   console.log('GET /api/questions/history - Request received');
   try {
     const query = `
       MATCH (q:Question)
       WHERE q.archivedAt IS NOT NULL
-      RETURN q
+      WITH q
+      OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
+      WITH q, 
+           count(r) as totalResponses,
+           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'agree'}) | r]) as agreeCount,
+           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'disagree'}) | r]) as disagreeCount,
+           collect(DISTINCT r.location) as locations
+      RETURN q {
+        .*,
+        totalResponses: totalResponses,
+        agreeCount: agreeCount,
+        disagreeCount: disagreeCount,
+        uniqueLocations: size(locations)
+      }
       ORDER BY q.archivedAt DESC
     `;
     
-    console.log('Fetching question history');
+    console.log('Fetching question history with statistics');
     const result = await runQuery(query);
     console.log('Found', result.length, 'archived questions');
     
-    const history = result.map(record => record.get('q').properties);
+    const history = result.map(record => record.get('q'));
     res.json(history);
   } catch (error) {
     console.error('Error fetching question history:', error);
     res.status(500).json({ error: 'Failed to fetch question history' });
+  }
+});
+
+// Get detailed statistics for a specific question
+app.get('/api/questions/:text/stats', async (req, res) => {
+  console.log('GET /api/questions/:text/stats - Request received');
+  try {
+    const { text } = req.params;
+    const query = `
+      MATCH (q:Question {text: $text})
+      WITH q
+      OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
+      WITH q, 
+           count(r) as totalResponses,
+           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'agree'}) | r]) as agreeCount,
+           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'disagree'}) | r]) as disagreeCount,
+           collect(DISTINCT r.location) as locations
+      RETURN q {
+        .*,
+        totalResponses: totalResponses,
+        agreeCount: agreeCount,
+        disagreeCount: disagreeCount,
+        uniqueLocations: size(locations),
+        locations: locations
+      }
+    `;
+    
+    console.log('Fetching statistics for question:', text);
+    const result = await runQuery(query, { text });
+    
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    
+    res.json(result[0].get('q'));
+  } catch (error) {
+    console.error('Error fetching question statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch question statistics' });
   }
 });
 
