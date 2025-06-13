@@ -4,7 +4,7 @@ import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
-import { api, CURRENT_QUESTION, QUESTION_THEME, THEME_COLOR } from './services/api';
+import { api } from './services/api';
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -47,16 +47,17 @@ class ErrorBoundary extends React.Component {
 
 function App() {
   console.log('App component rendering');
+  const [currentQuestion, setCurrentQuestion] = useState({ text: '', theme: 'general' });
   const [graphData, setGraphData] = useState({
     nodes: [
       { 
         id: 'question', 
-        name: `Question: ${CURRENT_QUESTION}`, 
-        color: THEME_COLOR, 
+        name: `Question: ${currentQuestion.text}`, 
+        color: "#4CAF50", 
         x: 0, 
         y: 0, 
         z: 0,
-        theme: QUESTION_THEME
+        theme: currentQuestion.theme
       }
     ],
     links: []
@@ -68,11 +69,50 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
+  const [responseStats, setResponseStats] = useState({
+    totalResponses: 0,
+    agreeCount: 0,
+    disagreeCount: 0,
+    mostActiveZip: { zip: '', count: 0 }
+  });
   const fgRef = useRef(null);
   const mapRef = useRef(null);
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
 
+  // Function to fetch current question
+  const fetchCurrentQuestion = useCallback(async () => {
+    try {
+      const question = await api.getCurrentQuestion();
+      setCurrentQuestion(question);
+    } catch (error) {
+      console.error('Error fetching current question:', error);
+      setError('Failed to fetch current question');
+    }
+  }, []);
+
+  // Poll for current question updates every 30 seconds
+  useEffect(() => {
+    fetchCurrentQuestion();
+    const interval = setInterval(fetchCurrentQuestion, 30000);
+    return () => clearInterval(interval);
+  }, [fetchCurrentQuestion]);
+
+  // Update graph data when current question changes
+  useEffect(() => {
+    setGraphData(prevData => ({
+      ...prevData,
+      nodes: prevData.nodes.map(node => 
+        node.id === 'question' 
+          ? { 
+              ...node, 
+              name: `Question: ${currentQuestion.text}`,
+              theme: currentQuestion.theme
+            }
+          : node
+      )
+    }));
+  }, [currentQuestion]);
 
   // Function to get ZIP code from coordinates using Google Places API
   const getZipFromCoordinates = async (lat, lng) => {
@@ -95,6 +135,13 @@ function App() {
       console.error('Error getting ZIP code:', error);
       return null;
     }
+  };
+
+  // Function to add random jitter to coordinates
+  const addCoordinateJitter = (coord, maxJitter = 0.01) => {
+    // maxJitter of 0.01 is roughly 1km
+    const jitter = (Math.random() - 0.5) * maxJitter;
+    return coord + jitter;
   };
 
   // Function to get user's location
@@ -201,12 +248,12 @@ function App() {
       const nodes = [
         { 
           id: 'question', 
-          name: `Question: ${CURRENT_QUESTION}`, 
-          color: THEME_COLOR, 
+          name: `Question: ${currentQuestion.text}`, 
+          color: "#4CAF50", 
           x: 0, 
           y: 0, 
           z: 0,
-          theme: QUESTION_THEME
+          theme: currentQuestion.theme
         }
       ];
       const links = [];
@@ -214,13 +261,26 @@ function App() {
 
       // Group responses by ZIP code for map statistics
       const zipStats = {};
+      let agreeCount = 0;
+      let disagreeCount = 0;
+      let mostActiveZip = { zip: '', count: 0 };
+
       responses.forEach(response => {
+        // Count agree/disagree
+        if (response.response === 'agree') {
+          agreeCount++;
+        } else {
+          disagreeCount++;
+        }
+
+        // Track ZIP code statistics
         if (!zipStats[response.location]) {
           zipStats[response.location] = {
             agree: 0,
             disagree: 0,
             lat: response.lat,
-            lng: response.lng
+            lng: response.lng,
+            total: 0
           };
         }
         if (response.response === 'agree') {
@@ -228,11 +288,27 @@ function App() {
         } else {
           zipStats[response.location].disagree++;
         }
+        zipStats[response.location].total++;
+
+        // Update most active ZIP
+        if (zipStats[response.location].total > mostActiveZip.count) {
+          mostActiveZip = {
+            zip: response.location,
+            count: zipStats[response.location].total
+          };
+        }
+      });
+
+      // Update response statistics
+      setResponseStats({
+        totalResponses: responses.length,
+        agreeCount,
+        disagreeCount,
+        mostActiveZip
       });
 
       // Create nodes and links
       responses.forEach((response, index) => {
-        // console.log('Processing response:', response);
         const nodeId = `response-${index}`;
         const angle = Math.random() * Math.PI * 2;
         const radius = 100;
@@ -248,39 +324,32 @@ function App() {
           y,
           z
         };
-        // console.log('Created node:', node);
         nodes.push(node);
 
-        // Add link to question
         const link = {
           source: 'question',
           target: nodeId,
           color: response.response === 'agree' ? 'green' : 'red',
           width: 4
         };
-        // console.log('Created link:', link);
         links.push(link);
       });
 
-      // Create map points with statistics
+      // Create map points with statistics and jittered coordinates
       Object.entries(zipStats).forEach(([zip, stats]) => {
         const point = {
           id: `zip-${zip}`,
-          lat: stats.lat,
-          lng: stats.lng,
+          lat: addCoordinateJitter(stats.lat),
+          lng: addCoordinateJitter(stats.lng),
           color: stats.agree >= stats.disagree ? 'green' : 'red',
           stats: {
             agree: stats.agree,
             disagree: stats.disagree,
-            total: stats.agree + stats.disagree
+            total: stats.total
           }
         };
-        console.log('Created map point:', point);
         points.push(point);
       });
-
-      // console.log('Final graph data:', { nodes, links });
-      // console.log('Final map points:', points);
 
       setGraphData({ nodes, links });
       setMapPoints(points);
@@ -288,7 +357,7 @@ function App() {
       console.error('Error updating visualization:', error);
       setError('Failed to update visualization');
     }
-  }, []);
+  }, [currentQuestion]);
 
   // Load initial data
   useEffect(() => {
@@ -305,7 +374,7 @@ function App() {
     try {
       // Store in backend
       await api.addResponse({
-        question: CURRENT_QUESTION,
+        question: currentQuestion.text,
         response: sentiment,
         timestamp: new Date().toISOString(),
         location: userLocation.zip,
@@ -353,15 +422,50 @@ function App() {
         {/* <div style={{ color: THEME_COLOR, marginBottom: '10px' }}>
           Theme: {QUESTION_THEME.charAt(0).toUpperCase() + QUESTION_THEME.slice(1)}
         </div> */}
-        Question of the Day: {CURRENT_QUESTION}
+        Question of the Day: {currentQuestion.text}
       </div>
-      <div className="controls" style={{
+
+      {/* Statistics Panel */}
+      <div style={{
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        padding: '15px',
+        borderRadius: '8px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        zIndex: 1000,
+        minWidth: '200px'
+      }}>
+        <h3 style={{ margin: '0 0 10px 0', fontSize: '1.1rem' }}>Response Statistics</h3>
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ color: 'green', fontWeight: 'bold' }}>Agree: {responseStats.agreeCount}</div>
+          <div style={{ color: 'red', fontWeight: 'bold' }}>Disagree: {responseStats.disagreeCount}</div>
+          <div style={{ marginTop: '5px' }}>Total: {responseStats.totalResponses}</div>
+        </div>
+        {responseStats.mostActiveZip.zip && (
+          <div style={{ 
+            marginTop: '10px', 
+            paddingTop: '10px', 
+            borderTop: '1px solid #eee',
+            fontSize: '0.9rem'
+          }}>
+            <div style={{ fontWeight: 'bold' }}>Most Active ZIP:</div>
+            <div>{responseStats.mostActiveZip.zip}</div>
+            <div style={{ color: '#666' }}>{responseStats.mostActiveZip.count} responses</div>
+          </div>
+        )}
+      </div>
+
+      <div style={{
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
         gap: '10px',
         margin: '20px 0',
-        flexWrap: 'wrap'
+        flexWrap: 'wrap',
+        position: 'relative',
+        zIndex: 900
       }}>
         <button 
           onClick={getLocation}
@@ -372,7 +476,8 @@ function App() {
             border: 'none',
             color: 'white',
             cursor: 'pointer',
-            opacity: isLoading ? 0.7 : 1
+            opacity: isLoading ? 0.7 : 1,
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}
           disabled={isLoading}
         >
@@ -387,7 +492,8 @@ function App() {
             border: 'none',
             color: 'white',
             cursor: 'pointer',
-            opacity: !userLocation ? 0.5 : 1
+            opacity: !userLocation ? 0.5 : 1,
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}
           disabled={!userLocation}
         >
@@ -402,7 +508,8 @@ function App() {
             border: 'none',
             color: 'white',
             cursor: 'pointer',
-            opacity: !userLocation ? 0.5 : 1
+            opacity: !userLocation ? 0.5 : 1,
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}
           disabled={!userLocation}
         >
@@ -412,11 +519,12 @@ function App() {
           onClick={resetZoom} 
           style={{ 
             backgroundColor: 'black',
-
             padding: '10px 20px',
             borderRadius: '5px',
             border: '1px solid #ccc',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            color: 'white',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}
         >
           Reset View
@@ -429,7 +537,8 @@ function App() {
             borderRadius: '5px',
             border: 'none',
             color: 'white',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}
         >
           Reset All Data
@@ -441,7 +550,9 @@ function App() {
             borderRadius: '5px',
             border: '1px solid #ccc',
             cursor: 'pointer',
-            backgroundColor: 'black'
+            backgroundColor: 'black',
+            color: 'white',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}
         >
           Why do you need my location?
