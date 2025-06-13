@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
 import { api } from './services/api';
+import HistoryView from './components/HistoryView';
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -79,6 +80,7 @@ function App() {
   const mapRef = useRef(null);
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
+  const [showHistory, setShowHistory] = useState(false);
 
   // Function to fetch current question
   const fetchCurrentQuestion = useCallback(async () => {
@@ -407,6 +409,35 @@ function App() {
 
   return (
     <div className="App">
+      {/* History Dropdown */}
+      <div style={{
+        position: 'fixed',
+        top: '20px',
+        left: '20px',
+        zIndex: 1000
+      }}>
+        <button
+          onClick={() => setShowHistory(true)}
+          style={{
+            padding: '10px 20px',
+            background: '#4CAF50',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <span>Question History</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 4L6 8L10 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
       <div className="question-box" style={{
         margin: '30px auto 10px auto',
         padding: '20px',
@@ -667,6 +698,7 @@ function App() {
           </MapContainer>
         </div>
       </div>
+      {showHistory && <HistoryView onClose={() => setShowHistory(false)} />}
     </div>
   );
 }

@@ -89,4 +89,28 @@ export const api = {
       throw error;
     }
   },
+
+  // Get question history
+  getQuestionHistory: async () => {
+    console.log('Fetching question history from:', `${API_BASE_URL}/api/questions/history`);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/questions/history`);
+      return handleResponse(response);
+    } catch (error) {
+      console.error('Error in getQuestionHistory:', error);
+      throw error;
+    }
+  },
+
+  // Get responses for a specific question
+  getQuestionResponses: async (questionText) => {
+    console.log('Fetching responses for question:', questionText);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/questions/${encodeURIComponent(questionText)}/responses`);
+      return handleResponse(response);
+    } catch (error) {
+      console.error('Error in getQuestionResponses:', error);
+      throw error;
+    }
+  }
 }; 
