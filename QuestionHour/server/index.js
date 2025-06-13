@@ -249,23 +249,33 @@ app.get('/api/questions/history', async (req, res) => {
       WITH q
       OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
       WITH q, 
+           collect(r) as responses,
            count(r) as totalResponses,
            size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'agree'}) | r]) as agreeCount,
            size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'disagree'}) | r]) as disagreeCount,
            collect(DISTINCT r.location) as locations
       RETURN q {
         .*,
+        timestamp: datetime(q.timestamp).toString(),
+        responses: [r in responses | r {
+          .*,
+          location: r.location,
+          lat: r.lat,
+          lng: r.lng,
+          response: r.response,
+          timestamp: datetime(r.timestamp).toString()
+        }],
         totalResponses: totalResponses,
         agreeCount: agreeCount,
         disagreeCount: disagreeCount,
         uniqueLocations: size(locations)
       }
-      ORDER BY q.archivedAt DESC
+      ORDER BY q.timestamp DESC
     `;
     
-    console.log('Fetching question history with statistics');
+    console.log('Fetching question history with responses from Neo4j');
     const result = await runQuery(query);
-    console.log('Found', result.length, 'archived questions');
+    console.log('Found', result.length, 'archived questions with responses');
     
     const history = result.map(record => record.get('q'));
     res.json(history);

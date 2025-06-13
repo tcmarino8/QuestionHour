@@ -26,43 +26,11 @@ function HistoryView({ onClose }) {
     return coord + jitter;
   };
 
-  // Fetch question history from Neo4j
-  useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const history = await api.getQuestionHistory();
-        console.log('Fetched question history from Neo4j:', history);
-        
-        // Sort questions by archivedAt timestamp in descending order
-        const sortedQuestions = history.sort((a, b) => 
-          new Date(b.archivedAt) - new Date(a.archivedAt)
-        );
-        
-        setQuestions(sortedQuestions);
-        
-        // Set the most recent question as default
-        if (sortedQuestions.length > 0) {
-          console.log('Setting most recent question:', sortedQuestions[0]);
-          setSelectedQuestion(sortedQuestions[0]);
-          updateVisualization(sortedQuestions[0]);
-        } else {
-          console.log('No archived questions found in Neo4j');
-        }
-      } catch (error) {
-        console.error('Error fetching question history:', error);
-        setError('Failed to fetch question history');
-      }
-    };
-    fetchHistory();
-  }, []);
-
   // Update visualization when a question is selected
-  const updateVisualization = async (question) => {
+  const updateVisualization = React.useCallback(async (question) => {
     if (!question) return;
 
     try {
-      const responses = await api.getQuestionResponses(question.text);
-      
       // Convert responses to graph data
       const nodes = [
         { 
@@ -79,24 +47,13 @@ function HistoryView({ onClose }) {
 
       // Group responses by ZIP code for map statistics
       const zipStats = {};
-      let agreeCount = 0;
-      let disagreeCount = 0;
       let mostActiveZip = { zip: '', count: 0 };
 
-      responses.locations.forEach(location => {
-        const response = responses.responses.find(r => r.location === location);
-        if (!response) return;
-
-        // Count agree/disagree
-        if (response.response === 'agree') {
-          agreeCount++;
-        } else {
-          disagreeCount++;
-        }
-
+      // Use responses directly from the question node
+      question.responses.forEach(response => {
         // Track ZIP code statistics
-        if (!zipStats[location]) {
-          zipStats[location] = {
+        if (!zipStats[response.location]) {
+          zipStats[response.location] = {
             agree: 0,
             disagree: 0,
             lat: response.lat,
@@ -105,31 +62,31 @@ function HistoryView({ onClose }) {
           };
         }
         if (response.response === 'agree') {
-          zipStats[location].agree++;
+          zipStats[response.location].agree++;
         } else {
-          zipStats[location].disagree++;
+          zipStats[response.location].disagree++;
         }
-        zipStats[location].total++;
+        zipStats[response.location].total++;
 
         // Update most active ZIP
-        if (zipStats[location].total > mostActiveZip.count) {
+        if (zipStats[response.location].total > mostActiveZip.count) {
           mostActiveZip = {
-            zip: location,
-            count: zipStats[location].total
+            zip: response.location,
+            count: zipStats[response.location].total
           };
         }
       });
 
       // Update response statistics
       setResponseStats({
-        totalResponses: responses.totalResponses,
-        agreeCount: responses.agreeCount,
-        disagreeCount: responses.disagreeCount,
+        totalResponses: question.totalResponses,
+        agreeCount: question.agreeCount,
+        disagreeCount: question.disagreeCount,
         mostActiveZip
       });
 
       // Create nodes and links
-      responses.responses.forEach((response, index) => {
+      question.responses.forEach((response, index) => {
         const nodeId = `response-${index}`;
         const angle = Math.random() * Math.PI * 2;
         const radius = 100;
@@ -178,7 +135,62 @@ function HistoryView({ onClose }) {
       console.error('Error updating visualization:', error);
       setError('Failed to update visualization');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const history = await api.getQuestionHistory();
+        console.log('Raw question history from Neo4j:', JSON.stringify(history, null, 2));
+        
+        // Log each question's timestamp before sorting
+        console.log('Questions before sorting:');
+        history.forEach((q, index) => {
+          console.log(`Question ${index + 1}:`, {
+            text: q.text,
+            timestamp: q.timestamp,
+            parsedDate: new Date(q.timestamp)
+          });
+        });
+        
+        // Sort questions by timestamp in descending order
+        const sortedQuestions = history.sort((a, b) => {
+          const dateA = new Date(a.timestamp);
+          const dateB = new Date(b.timestamp);
+          console.log('Comparing dates:', {
+            a: { text: a.text, timestamp: a.timestamp, parsed: dateA },
+            b: { text: b.text, timestamp: b.timestamp, parsed: dateB }
+          });
+          return dateB - dateA;
+        });
+        
+        // Log the sorted order
+        console.log('Questions after sorting:');
+        sortedQuestions.forEach((q, index) => {
+          console.log(`Question ${index + 1}:`, {
+            text: q.text,
+            timestamp: q.timestamp,
+            parsedDate: new Date(q.timestamp)
+          });
+        });
+        
+        setQuestions(sortedQuestions);
+        
+        // Set the most recent question as default
+        if (sortedQuestions.length > 0) {
+          console.log('Setting most recent question:', sortedQuestions[0]);
+          setSelectedQuestion(sortedQuestions[0]);
+          updateVisualization(sortedQuestions[0]);
+        } else {
+          console.log('No archived questions found in Neo4j');
+        }
+      } catch (error) {
+        console.error('Error fetching question history:', error);
+        setError('Failed to fetch question history');
+      }
+    };
+    fetchHistory();
+  }, [updateVisualization]);
 
   // Handle question selection
   const handleQuestionChange = (event) => {
@@ -225,11 +237,32 @@ function HistoryView({ onClose }) {
           }}
         >
           <option value="">Select a question</option>
-          {questions.map((question, index) => (
-            <option key={index} value={question.text}>
-              {new Date(question.archivedAt).toLocaleString()} - {question.text}
-            </option>
-          ))}
+          {questions.map((question, index) => {
+            const date = new Date(question.timestamp);
+            console.log('Rendering question:', {
+              text: question.text,
+              timestamp: question.timestamp,
+              parsedDate: date,
+              formattedDate: date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+            });
+            return (
+              <option key={index} value={question.text}>
+                {date instanceof Date && !isNaN(date) ? date.toLocaleString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : 'Invalid Date'} - {question.text}
+              </option>
+            );
+          })}
         </select>
         <button
           onClick={onClose}
