@@ -26,19 +26,27 @@ function HistoryView({ onClose }) {
     return coord + jitter;
   };
 
-  // Fetch question history
+  // Fetch question history from Neo4j
   useEffect(() => {
     const fetchHistory = async () => {
       try {
         const history = await api.getQuestionHistory();
-        setQuestions(history);
+        console.log('Fetched question history from Neo4j:', history);
+        
+        // Sort questions by archivedAt timestamp in descending order
+        const sortedQuestions = history.sort((a, b) => 
+          new Date(b.archivedAt) - new Date(a.archivedAt)
+        );
+        
+        setQuestions(sortedQuestions);
+        
         // Set the most recent question as default
-        if (history.length > 0) {
-          const mostRecent = history.reduce((latest, current) => 
-            new Date(current.archivedAt) > new Date(latest.archivedAt) ? current : latest
-          );
-          setSelectedQuestion(mostRecent);
-          updateVisualization(mostRecent);
+        if (sortedQuestions.length > 0) {
+          console.log('Setting most recent question:', sortedQuestions[0]);
+          setSelectedQuestion(sortedQuestions[0]);
+          updateVisualization(sortedQuestions[0]);
+        } else {
+          console.log('No archived questions found in Neo4j');
         }
       } catch (error) {
         console.error('Error fetching question history:', error);
@@ -175,7 +183,9 @@ function HistoryView({ onClose }) {
   // Handle question selection
   const handleQuestionChange = (event) => {
     const selectedQuestionText = event.target.value;
+    console.log('Selected question text:', selectedQuestionText);
     const question = questions.find(q => q.text === selectedQuestionText);
+    console.log('Found question:', question);
     if (question) {
       setSelectedQuestion(question);
       updateVisualization(question);
@@ -190,177 +200,170 @@ function HistoryView({ onClose }) {
       right: 0,
       bottom: 0,
       backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      zIndex: 2000,
-      overflow: 'auto',
-      padding: '20px'
+      zIndex: 2000
     }}>
+      {/* Top left dropdown */}
       <div style={{
-        position: 'relative',
-        maxWidth: '1200px',
-        margin: '0 auto',
-        backgroundColor: 'white',
-        borderRadius: '12px',
-        padding: '20px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+        position: 'fixed',
+        top: '20px',
+        left: '20px',
+        zIndex: 2001,
+        display: 'flex',
+        gap: '10px',
+        alignItems: 'center'
       }}>
+        <select
+          value={selectedQuestion?.text || ''}
+          onChange={handleQuestionChange}
+          style={{
+            padding: '8px',
+            borderRadius: '4px',
+            border: '1px solid #ccc',
+            minWidth: '300px',
+            fontSize: '14px',
+            backgroundColor: 'white'
+          }}
+        >
+          <option value="">Select a question</option>
+          {questions.map((question, index) => (
+            <option key={index} value={question.text}>
+              {new Date(question.archivedAt).toLocaleString()} - {question.text}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={onClose}
+          style={{
+            padding: '8px 16px',
+            background: '#f44336',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          Close
+        </button>
+      </div>
+
+      {/* Stats Panel */}
+      {selectedQuestion && (
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px'
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 2001,
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          padding: '15px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          minWidth: '200px'
         }}>
-          <h2 style={{ margin: 0 }}>Question History</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <select
-              value={selectedQuestion?.text || ''}
-              onChange={handleQuestionChange}
-              style={{
-                padding: '8px',
-                borderRadius: '4px',
-                border: '1px solid #ccc',
-                minWidth: '300px',
-                fontSize: '14px'
-              }}
+          <h3 style={{ margin: '0 0 10px 0', fontSize: '1.1rem' }}>Response Statistics</h3>
+          <div style={{ marginBottom: '8px' }}>
+            <div style={{ color: 'green', fontWeight: 'bold' }}>Agree: {responseStats.agreeCount}</div>
+            <div style={{ color: 'red', fontWeight: 'bold' }}>Disagree: {responseStats.disagreeCount}</div>
+            <div style={{ marginTop: '5px' }}>Total: {responseStats.totalResponses}</div>
+          </div>
+          {responseStats.mostActiveZip.zip && (
+            <div style={{ 
+              marginTop: '10px', 
+              paddingTop: '10px', 
+              borderTop: '1px solid #eee',
+              fontSize: '0.9rem'
+            }}>
+              <div style={{ fontWeight: 'bold' }}>Most Active ZIP:</div>
+              <div>{responseStats.mostActiveZip.zip}</div>
+              <div style={{ color: '#666' }}>{responseStats.mostActiveZip.count} responses</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Visualizations */}
+      {selectedQuestion && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '20px',
+          padding: '20px'
+        }}>
+          <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+            <ForceGraph3D
+              graphData={graphData}
+              nodeAutoColorBy="color"
+              nodeLabel="name"
+              linkColor='color'
+              linkWidth={4}
+              linkDirectionalParticles={2}
+              linkDirectionalParticleWidth={2}
+              enableNodeDrag={true}
+              enableNavigationControls={true}
+              enablePointerInteraction={true}
+              cooldownTicks={100}
+            />
+          </div>
+          <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+            <MapContainer
+              center={[37.0902, -95.7129]}
+              zoom={4}
+              style={{ height: '100%', width: '100%' }}
             >
-              <option value="">Select a question</option>
-              {questions.map((question, index) => (
-                <option key={index} value={question.text}>
-                  {new Date(question.archivedAt).toLocaleString()} - {question.text}
-                </option>
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              />
+              {mapPoints.map(point => (
+                <CircleMarker
+                  key={point.id}
+                  center={[point.lat, point.lng]}
+                  radius={Math.min(5 + point.stats.total, 30)}
+                  fillColor={point.color}
+                  color="#fff"
+                  weight={1}
+                  fillOpacity={0.7}
+                >
+                  <Popup>
+                    <div style={{
+                      padding: '10px',
+                      textAlign: 'center'
+                    }}>
+                      <h3 style={{ margin: '0 0 10px 0' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
+                        <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
+                      </div>
+                      <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
+                    </div>
+                  </Popup>
+                </CircleMarker>
               ))}
-            </select>
-            <button
-              onClick={onClose}
-              style={{
-                padding: '8px 16px',
-                background: '#f44336',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              Close
-            </button>
+            </MapContainer>
           </div>
         </div>
+      )}
 
-        {selectedQuestion && (
-          <>
-            {/* Question and Stats Panel */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              marginBottom: '20px',
-              gap: '20px'
-            }}>
-              <div style={{
-                flex: 1,
-                padding: '20px',
-                background: '#f9f9f9',
-                borderRadius: '12px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                fontSize: '1.4rem',
-                fontWeight: 'bold',
-                textAlign: 'center',
-                color: '#333'
-              }}>
-                {selectedQuestion.text}
-              </div>
-              <div style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                padding: '15px',
-                borderRadius: '8px',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                minWidth: '200px'
-              }}>
-                <h3 style={{ margin: '0 0 10px 0', fontSize: '1.1rem' }}>Response Statistics</h3>
-                <div style={{ marginBottom: '8px' }}>
-                  <div style={{ color: 'green', fontWeight: 'bold' }}>Agree: {responseStats.agreeCount}</div>
-                  <div style={{ color: 'red', fontWeight: 'bold' }}>Disagree: {responseStats.disagreeCount}</div>
-                  <div style={{ marginTop: '5px' }}>Total: {responseStats.totalResponses}</div>
-                </div>
-                {responseStats.mostActiveZip.zip && (
-                  <div style={{ 
-                    marginTop: '10px', 
-                    paddingTop: '10px', 
-                    borderTop: '1px solid #eee',
-                    fontSize: '0.9rem'
-                  }}>
-                    <div style={{ fontWeight: 'bold' }}>Most Active ZIP:</div>
-                    <div>{responseStats.mostActiveZip.zip}</div>
-                    <div style={{ color: '#666' }}>{responseStats.mostActiveZip.count} responses</div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Visualizations */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '20px',
-              height: 'calc(100vh - 300px)'
-            }}>
-              <div style={{ height: '100%' }}>
-                <ForceGraph3D
-                  graphData={graphData}
-                  nodeAutoColorBy="color"
-                  nodeLabel="name"
-                  linkColor='color'
-                  linkWidth={4}
-                  linkDirectionalParticles={2}
-                  linkDirectionalParticleWidth={2}
-                  enableNodeDrag={true}
-                  enableNavigationControls={true}
-                  enablePointerInteraction={true}
-                  cooldownTicks={100}
-                />
-              </div>
-              <div style={{ height: '100%' }}>
-                <MapContainer
-                  center={[37.0902, -95.7129]}
-                  zoom={4}
-                  style={{ height: '100%', width: '100%' }}
-                >
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  />
-                  {mapPoints.map(point => (
-                    <CircleMarker
-                      key={point.id}
-                      center={[point.lat, point.lng]}
-                      radius={Math.min(5 + point.stats.total, 30)}
-                      fillColor={point.color}
-                      color="#fff"
-                      weight={1}
-                      fillOpacity={0.7}
-                    >
-                      <Popup>
-                        <div style={{
-                          padding: '10px',
-                          textAlign: 'center'
-                        }}>
-                          <h3 style={{ margin: '0 0 10px 0' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
-                            <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
-                          </div>
-                          <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
-                        </div>
-                      </Popup>
-                    </CircleMarker>
-                  ))}
-                </MapContainer>
-              </div>
-            </div>
-          </>
-        )}
-
-        {error && <p className="error" style={{ color: 'red', textAlign: 'center' }}>{error}</p>}
-      </div>
+      {error && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: 'white',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          zIndex: 2002
+        }}>
+          <p style={{ color: 'red', margin: 0 }}>{error}</p>
+        </div>
+      )}
     </div>
   );
 }
