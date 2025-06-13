@@ -242,24 +242,20 @@ function HistoryView({ onClose }) {
             console.log('Rendering question:', {
               text: question.text,
               timestamp: question.timestamp,
-              parsedDate: date,
-              formattedDate: date.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })
+              parsedDate: date
             });
             return (
               <option key={index} value={question.text}>
-                {date instanceof Date && !isNaN(date) ? date.toLocaleString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                }) : 'Invalid Date'} - {question.text}
+                {date instanceof Date && !isNaN(date) 
+                  ? date.toLocaleString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                  : 'Invalid Date'} - {question?.text}
               </option>
             );
           })}

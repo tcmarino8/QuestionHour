@@ -256,21 +256,21 @@ app.get('/api/questions/history', async (req, res) => {
            collect(DISTINCT r.location) as locations
       RETURN q {
         .*,
-        timestamp: datetime(q.timestamp).toString(),
+        timestamp: toString(q.archivedAt),
         responses: [r in responses | r {
           .*,
           location: r.location,
           lat: r.lat,
           lng: r.lng,
           response: r.response,
-          timestamp: datetime(r.timestamp).toString()
+          timestamp: toString(r.timestamp)
         }],
         totalResponses: totalResponses,
         agreeCount: agreeCount,
         disagreeCount: disagreeCount,
         uniqueLocations: size(locations)
       }
-      ORDER BY q.timestamp DESC
+      ORDER BY q.archivedAt DESC
     `;
     
     console.log('Fetching question history with responses from Neo4j');
