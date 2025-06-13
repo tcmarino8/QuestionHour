@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { createGraphData } from '../utils/visualizationUtils';
 
 function HistoryView({ onClose }) {
   const [questions, setQuestions] = useState([]);
@@ -31,106 +32,11 @@ function HistoryView({ onClose }) {
     if (!question) return;
 
     try {
-      // Convert responses to graph data
-      const nodes = [
-        { 
-          id: 'question', 
-          name: `Question: ${question.text}`, 
-          color: "#4CAF50", 
-          x: 0, 
-          y: 0, 
-          z: 0
-        }
-      ];
-      const links = [];
-      const points = [];
-
-      // Group responses by ZIP code for map statistics
-      const zipStats = {};
-      let mostActiveZip = { zip: '', count: 0 };
-
-      // Use responses directly from the question node
-      question.responses.forEach(response => {
-        // Track ZIP code statistics
-        if (!zipStats[response.location]) {
-          zipStats[response.location] = {
-            agree: 0,
-            disagree: 0,
-            lat: response.lat,
-            lng: response.lng,
-            total: 0
-          };
-        }
-        if (response.response === 'agree') {
-          zipStats[response.location].agree++;
-        } else {
-          zipStats[response.location].disagree++;
-        }
-        zipStats[response.location].total++;
-
-        // Update most active ZIP
-        if (zipStats[response.location].total > mostActiveZip.count) {
-          mostActiveZip = {
-            zip: response.location,
-            count: zipStats[response.location].total
-          };
-        }
-      });
-
-      // Update response statistics
-      setResponseStats({
-        totalResponses: question.totalResponses,
-        agreeCount: question.agreeCount,
-        disagreeCount: question.disagreeCount,
-        mostActiveZip
-      });
-
-      // Create nodes and links
-      question.responses.forEach((response, index) => {
-        const nodeId = `response-${index}`;
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 100;
-        const x = Math.cos(angle) * radius;
-        const y = Math.sin(angle) * radius;
-        const z = (Math.random() - 0.5) * 50;
-
-        const node = {
-          id: nodeId,
-          name: `ZIP: ${response.location}`,
-          color: response.response === 'agree' ? 'green' : 'red',
-          x,
-          y,
-          z
-        };
-        nodes.push(node);
-
-        const link = {
-          source: 'question',
-          target: nodeId,
-          color: response.response === 'agree' ? 'green' : 'red',
-          width: 4
-        };
-        links.push(link);
-      });
-
-      // Create map points with statistics and jittered coordinates
-      Object.entries(zipStats).forEach(([zip, stats]) => {
-        const point = {
-          id: `zip-${zip}`,
-          lat: addCoordinateJitter(stats.lat),
-          lng: addCoordinateJitter(stats.lng),
-          color: stats.agree >= stats.disagree ? 'green' : 'red',
-          stats: {
-            agree: stats.agree,
-            disagree: stats.disagree,
-            total: stats.total
-          }
-        };
-        points.push(point);
-      });
-
-      setGraphData({ nodes, links });
-      setMapPoints(points);
+      const { graphData: newGraphData, mapPoints: newMapPoints, stats } = createGraphData(question, question.responses);
+      
+      setGraphData(newGraphData);
+      setMapPoints(newMapPoints);
+      setResponseStats(stats);
     } catch (error) {
       console.error('Error updating visualization:', error);
       setError('Failed to update visualization');
