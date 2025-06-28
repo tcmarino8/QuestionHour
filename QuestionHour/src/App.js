@@ -140,12 +140,7 @@ function App() {
     }
   };
 
-  // Function to add random jitter to coordinates
-  const addCoordinateJitter = (coord, maxJitter = 0.01) => {
-    // maxJitter of 0.01 is roughly 1km
-    const jitter = (Math.random() - 0.5) * maxJitter;
-    return coord + jitter;
-  };
+
 
   // Function to get user's location
   const getLocation = () => {

@@ -21,12 +21,6 @@ function HistoryView({ onClose }) {
     mostActiveZip: { zip: '', count: 0 }
   });
 
-  // Function to add random jitter to coordinates
-  const addCoordinateJitter = (coord, maxJitter = 0.01) => {
-    const jitter = (Math.random() - 0.5) * maxJitter;
-    return coord + jitter;
-  };
-
   // Update visualization when a question is selected
   const updateVisualization = React.useCallback(async (question) => {
     if (!question) return;
