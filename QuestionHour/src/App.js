@@ -82,6 +82,7 @@ function App() {
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
   const [showHistory, setShowHistory] = useState(false);
+  const [showStatsPanel, setShowStatsPanel] = useState(false);
 
   // Function to fetch current question
   const fetchCurrentQuestion = useCallback(async () => {
@@ -335,34 +336,125 @@ function App() {
         Question of the Day: {currentQuestion.text}
       </div>
 
-      {/* Statistics Panel */}
+      {/* Stats Panel Toggle Button */}
       <div style={{
         position: 'fixed',
         top: '20px',
         right: '20px',
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        padding: '15px',
-        borderRadius: '8px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        zIndex: 1000,
-        minWidth: '200px'
+        zIndex: 1000
       }}>
-        <h3 style={{ margin: '0 0 10px 0', fontSize: '1.1rem' }}>Response Statistics</h3>
-        <div style={{ marginBottom: '8px' }}>
-          <div style={{ color: 'green', fontWeight: 'bold' }}>Agree: {responseStats.agreeCount}</div>
-          <div style={{ color: 'red', fontWeight: 'bold' }}>Disagree: {responseStats.disagreeCount}</div>
-          <div style={{ marginTop: '5px' }}>Total: {responseStats.totalResponses}</div>
+        <button
+          onClick={() => setShowStatsPanel(!showStatsPanel)}
+          style={{
+            padding: '10px 20px',
+            background: showStatsPanel ? '#666' : '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'background-color 0.3s ease'
+          }}
+        >
+          <span>{showStatsPanel ? 'Hide Stats' : 'Show Stats'}</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d={showStatsPanel ? "M10 6L2 6" : "M2 6L10 6"} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d={showStatsPanel ? "M6 2L6 10" : "M6 2L6 10"} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Collapsible Stats Panel */}
+      <div style={{
+        position: 'fixed',
+        top: '0',
+        right: showStatsPanel ? '0' : '-300px',
+        width: '300px',
+        height: '100vh',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        boxShadow: showStatsPanel ? '0 0 20px rgba(0,0,0,0.2)' : 'none',
+        zIndex: 999,
+        transition: 'right 0.3s ease',
+        padding: '20px',
+        overflowY: 'auto',
+        backdropFilter: 'blur(10px)'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+          paddingBottom: '15px',
+          borderBottom: '2px solid #eee'
+        }}>
+          <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#333' }}>Response Statistics</h3>
+          <button
+            onClick={() => setShowStatsPanel(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '20px',
+              cursor: 'pointer',
+              color: '#666',
+              padding: '5px'
+            }}
+          >
+            ×
+          </button>
         </div>
+        
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            padding: '15px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            marginBottom: '10px'
+          }}>
+            <span style={{ color: 'green', fontWeight: 'bold', fontSize: '1.1rem' }}>Agree</span>
+            <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.agreeCount}</span>
+          </div>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            padding: '15px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            marginBottom: '10px'
+          }}>
+            <span style={{ color: 'red', fontWeight: 'bold', fontSize: '1.1rem' }}>Disagree</span>
+            <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.disagreeCount}</span>
+          </div>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            padding: '15px',
+            backgroundColor: '#e9ecef',
+            borderRadius: '8px',
+            border: '2px solid #007bff'
+          }}>
+            <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Total</span>
+            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#007bff' }}>{responseStats.totalResponses}</span>
+          </div>
+        </div>
+        
         {responseStats.mostActiveZip.zip && (
           <div style={{ 
-            marginTop: '10px', 
-            paddingTop: '10px', 
-            borderTop: '1px solid #eee',
-            fontSize: '0.9rem'
+            padding: '15px',
+            backgroundColor: '#fff3cd',
+            borderRadius: '8px',
+            border: '1px solid #ffeaa7'
           }}>
-            <div style={{ fontWeight: 'bold' }}>Most Active ZIP:</div>
-            <div>{responseStats.mostActiveZip.zip}</div>
-            <div style={{ color: '#666' }}>{responseStats.mostActiveZip.count} responses</div>
+            <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#856404' }}>Most Active ZIP Code</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#333' }}>{responseStats.mostActiveZip.zip}</div>
+            <div style={{ color: '#666', fontSize: '0.9rem' }}>{responseStats.mostActiveZip.count} responses</div>
           </div>
         )}
       </div>
