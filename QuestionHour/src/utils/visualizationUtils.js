@@ -4,7 +4,7 @@ export const createGraphData = (question, responses) => {
   const questionNode = { 
     id: `question-${question.text}`, 
     name: `Question: ${question.text}`, 
-    color: "#4CAF50", 
+    color: "#8000FF",
     x: 0, 
     y: 0, 
     z: 0,

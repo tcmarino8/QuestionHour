@@ -160,6 +160,12 @@ app.post('/api/responses', async (req, res) => {
 
 // Reset all data
 app.delete('/api/responses', async (req, res) => {
+  // Admin authentication check
+  const adminSecret = process.env.ADMIN_SECRET;
+  const providedSecret = req.headers['x-admin-secret'];
+  if (!adminSecret || providedSecret !== adminSecret) {
+    return res.status(403).json({ error: 'Forbidden: Invalid or missing admin secret.' });
+  }
   try {
     const query = `
       MATCH (n)

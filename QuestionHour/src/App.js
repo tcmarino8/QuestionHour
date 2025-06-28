@@ -291,19 +291,6 @@ function App() {
     }
   }
 
-  // Function to reset all data
-  const resetData = async () => {
-    try {
-      await api.resetData();
-      await updateVisualization();
-      setSuccessMessage('All data has been reset!');
-      setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (error) {
-      console.error('Error resetting data:', error);
-      setError('Failed to reset data');
-    }
-  };
-
   return (
     <div className="App">
       {/* History Dropdown */}
@@ -457,20 +444,7 @@ function App() {
         >
           Reset View
         </button>
-        <button 
-          onClick={resetData} 
-          style={{ 
-            backgroundColor: "#ff4444", 
-            padding: '10px 20px',
-            borderRadius: '5px',
-            border: 'none',
-            color: 'white',
-            cursor: 'pointer',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-          }}
-        >
-          Reset All Data
-        </button>
+
         <button 
           onClick={() => setShowInfoPopup(true)}
           style={{ 
