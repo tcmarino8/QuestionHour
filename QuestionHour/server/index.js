@@ -74,6 +74,26 @@ app.get('/api/responses', async (req, res) => {
   }
 });
 
+// Get responses for current question only
+app.get('/api/questions/current/responses', async (req, res) => {
+  console.log('GET /api/questions/current/responses - Request received');
+  try {
+    const query = `
+      MATCH (q:Question {current: true})-[:HAS_RESPONSE]->(r:Response)
+      RETURN r
+      ORDER BY r.timestamp DESC
+    `;
+    console.log('Executing query to find responses for current question');
+    const records = await runQuery(query);
+    const responses = records.map(record => record.get('r').properties);
+    console.log(`Found ${responses.length} responses for current question`);
+    res.json(responses);
+  } catch (error) {
+    console.error('Error fetching current question responses:', error);
+    res.status(500).json({ error: 'Failed to fetch current question responses', details: error.message });
+  }
+});
+
 // Add a new response
 app.post('/api/responses', async (req, res) => {
   try {
@@ -336,4 +356,4 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-}); 
+});

@@ -1,5 +1,3 @@
-
-
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
   ? 'https://question-hour.vercel.app'  
   : 'http://localhost:3001';
@@ -13,6 +11,19 @@ const getCurrentQuestion = async () => {
     return question;
   } catch (error) {
     console.error('Error in getCurrentQuestion:', error);
+    throw error;
+  }
+};
+
+// Function to get responses for current question only
+const getCurrentQuestionResponses = async () => {
+  console.log('Fetching current question responses from:', `${API_BASE_URL}/api/questions/current/responses`);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/questions/current/responses`);
+    const responses = await handleResponse(response);
+    return responses;
+  } catch (error) {
+    console.error('Error in getCurrentQuestionResponses:', error);
     throw error;
   }
 };
@@ -33,6 +44,9 @@ const handleResponse = async (response) => {
 export const api = {
   // Get current question
   getCurrentQuestion,
+
+  // Get responses for current question only
+  getCurrentQuestionResponses,
 
   // Get all responses
   getResponses: async () => {

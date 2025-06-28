@@ -243,9 +243,9 @@ function App() {
   // Function to fetch and update visualization data
   const updateVisualization = useCallback(async () => {
     try {
-      console.log('Fetching responses from backend...');
-      const responses = await api.getResponses();
-      console.log('Received responses:', responses);
+      console.log('Fetching current question responses from backend...');
+      const responses = await api.getCurrentQuestionResponses();
+      console.log('Received current question responses:', responses);
       
       const { graphData: newGraphData, mapPoints: newMapPoints, stats } = createGraphData(currentQuestion, responses);
       
