@@ -221,17 +221,8 @@ app.post('/api/questions/current', async (req, res) => {
     // First, archive the current question if it exists
     const archiveQuery = `
       MATCH (q:Question {current: true})
-      WITH q
-      OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
-      WITH q, 
-           count(r) as totalResponses,
-           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'agree'}) | r]) as agreeCount,
-           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'disagree'}) | r]) as disagreeCount
       SET q.current = false,
-          q.archivedAt = datetime(),
-          q.totalResponses = totalResponses,
-          q.agreeCount = agreeCount,
-          q.disagreeCount = disagreeCount
+          q.timestamp = datetime()
       RETURN q
     `;
     console.log('Archiving current question');
@@ -271,39 +262,39 @@ app.get('/api/questions/history', async (req, res) => {
   try {
     const query = `
       MATCH (q:Question)
-      WHERE q.archivedAt IS NOT NULL
-      WITH q
+      WHERE q.current = false
+      WITH DISTINCT q
       OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
-      WITH q, 
-           collect(r) as responses,
-           count(r) as totalResponses,
-           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'agree'}) | r]) as agreeCount,
-           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'disagree'}) | r]) as disagreeCount,
-           collect(DISTINCT r.location) as locations
-      RETURN q {
-        .*,
-        timestamp: toString(q.archivedAt),
-        responses: [r in responses | r {
-          .*,
+      WITH q, collect(r) as allResponses,
+           [r in collect(r) WHERE r.response = 'agree'] as agreeResponses,
+           [r in collect(r) WHERE r.response = 'disagree'] as disagreeResponses,
+           collect(DISTINCT r.location) as uniqueLocations
+      RETURN {
+        id: q.id,
+        text: q.text,
+        theme: q.theme,
+        timestamp: toString(q.timestamp),
+        current: q.current,
+        responses: [r in allResponses | {
+          response: r.response,
+          timestamp: toString(r.timestamp),
           location: r.location,
           lat: r.lat,
-          lng: r.lng,
-          response: r.response,
-          timestamp: toString(r.timestamp)
+          lng: r.lng
         }],
-        totalResponses: totalResponses,
-        agreeCount: agreeCount,
-        disagreeCount: disagreeCount,
-        uniqueLocations: size(locations)
-      }
-      ORDER BY q.archivedAt DESC
+        totalResponses: size(allResponses),
+        agreeCount: size(agreeResponses),
+        disagreeCount: size(disagreeResponses),
+        uniqueLocations: size(uniqueLocations)
+      } as questionData
+      ORDER BY q.timestamp DESC
     `;
     
     console.log('Fetching question history with responses from Neo4j');
     const result = await runQuery(query);
     console.log('Found', result.length, 'archived questions with responses');
     
-    const history = result.map(record => record.get('q'));
+    const history = result.map(record => record.get('questionData'));
     res.json(history);
   } catch (error) {
     console.error('Error fetching question history:', error);
