@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
@@ -21,13 +21,17 @@ function HistoryView({ onClose }) {
     mostActiveZip: { zip: '', count: 0 }
   });
 
-  // Update visualization when a question is selected
-  const updateVisualization = React.useCallback(async (question) => {
-    if (!question) return;
+  // Playback state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [visibleResponses, setVisibleResponses] = useState([]);
 
+  // Update visualization with visible responses only
+  const updateVisibleVisualization = useCallback((question, responses) => {
+    if (!question) return;
     try {
-      const { graphData: newGraphData, mapPoints: newMapPoints, stats } = createGraphData(question, question.responses);
-      
+      const { graphData: newGraphData, mapPoints: newMapPoints, stats } = createGraphData(question, responses);
       setGraphData(newGraphData);
       setMapPoints(newMapPoints);
       setResponseStats(stats);
@@ -37,52 +41,58 @@ function HistoryView({ onClose }) {
     }
   }, []);
 
+  // Handle playback
+  useEffect(() => {
+    if (!isPlaying || !selectedQuestion || !selectedQuestion.responses) return;
+
+    const responses = selectedQuestion.responses;
+    if (responses.length === 0) return;
+
+    const intervalTime = 500 / playbackSpeed; // Base interval of 500ms adjusted by speed
+    const interval = setInterval(() => {
+      setCurrentIndex(prevIndex => {
+        if (prevIndex >= responses.length) {
+          setIsPlaying(false);
+          return prevIndex;
+        }
+
+        const newResponses = responses.slice(0, prevIndex + 1);
+        setVisibleResponses(newResponses);
+        updateVisibleVisualization(selectedQuestion, newResponses);
+        
+        return prevIndex + 1;
+      });
+    }, intervalTime);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, selectedQuestion, playbackSpeed, updateVisibleVisualization]);
+
+  // Reset playback when question changes
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentIndex(0);
+    setVisibleResponses([]);
+    if (selectedQuestion && selectedQuestion.responses) {
+      updateVisibleVisualization(selectedQuestion, []);
+    }
+  }, [selectedQuestion, updateVisibleVisualization]);
+
+  // Original fetch history effect...
   useEffect(() => {
     const fetchHistory = async () => {
       try {
         const history = await api.getQuestionHistory();
-        console.log('Raw question history from Neo4j:', JSON.stringify(history, null, 2));
-        
-        // Log each question's timestamp before sorting
-        console.log('Questions before sorting:');
-        history.forEach((q, index) => {
-          console.log(`Question ${index + 1}:`, {
-            text: q.text,
-            timestamp: q.timestamp,
-            parsedDate: new Date(q.timestamp)
-          });
-        });
-        
-        // Sort questions by timestamp in descending order
         const sortedQuestions = history.sort((a, b) => {
           const dateA = new Date(a.timestamp);
           const dateB = new Date(b.timestamp);
-          console.log('Comparing dates:', {
-            a: { text: a.text, timestamp: a.timestamp, parsed: dateA },
-            b: { text: b.text, timestamp: b.timestamp, parsed: dateB }
-          });
           return dateB - dateA;
-        });
-        
-        // Log the sorted order
-        console.log('Questions after sorting:');
-        sortedQuestions.forEach((q, index) => {
-          console.log(`Question ${index + 1}:`, {
-            text: q.text,
-            timestamp: q.timestamp,
-            parsedDate: new Date(q.timestamp)
-          });
         });
         
         setQuestions(sortedQuestions);
         
-        // Set the most recent question as default
         if (sortedQuestions.length > 0) {
-          console.log('Setting most recent question:', sortedQuestions[0]);
           setSelectedQuestion(sortedQuestions[0]);
-          updateVisualization(sortedQuestions[0]);
-        } else {
-          console.log('No archived questions found in Neo4j');
+          updateVisibleVisualization(sortedQuestions[0], []);
         }
       } catch (error) {
         console.error('Error fetching question history:', error);
@@ -90,19 +100,83 @@ function HistoryView({ onClose }) {
       }
     };
     fetchHistory();
-  }, [updateVisualization]);
+  }, [updateVisibleVisualization]);
 
   // Handle question selection
   const handleQuestionChange = (event) => {
     const selectedQuestionText = event.target.value;
-    console.log('Selected question text:', selectedQuestionText);
     const question = questions.find(q => q.text === selectedQuestionText);
-    console.log('Found question:', question);
     if (question) {
       setSelectedQuestion(question);
-      updateVisualization(question);
+      setIsPlaying(false);
+      setCurrentIndex(0);
+      setVisibleResponses([]);
+      updateVisibleVisualization(question, []);
     }
   };
+
+  // Start playback from beginning
+  const handlePlay = () => {
+    if (!selectedQuestion || !selectedQuestion.responses) return;
+    
+    if (currentIndex >= selectedQuestion.responses.length) {
+      // If at the end, restart from beginning
+      setCurrentIndex(0);
+      setVisibleResponses([]);
+      updateVisibleVisualization(selectedQuestion, []);
+    }
+    
+    setIsPlaying(true);
+  };
+
+  // Playback controls component
+  const PlaybackControls = () => (
+    <div style={{
+      position: 'fixed',
+      bottom: '20px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 2001,
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      padding: '10px',
+      borderRadius: '8px',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+      display: 'flex',
+      gap: '10px',
+      alignItems: 'center'
+    }}>
+      <button
+        onClick={() => isPlaying ? setIsPlaying(false) : handlePlay()}
+        style={{
+          padding: '8px 16px',
+          background: isPlaying ? '#f44336' : '#4CAF50',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer'
+        }}
+      >
+        {isPlaying ? 'Pause' : currentIndex >= (selectedQuestion?.responses?.length || 0) ? 'Replay' : 'Play'}
+      </button>
+      <select
+        value={playbackSpeed}
+        onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+        style={{
+          padding: '8px',
+          borderRadius: '4px',
+          border: '1px solid #ccc'
+        }}
+      >
+        <option value={0.5}>0.5x</option>
+        <option value={1}>1x</option>
+        <option value={2}>2x</option>
+        <option value={5}>5x</option>
+      </select>
+      <div style={{ color: '#666' }}>
+        Responses: {visibleResponses.length} / {selectedQuestion?.responses?.length || 0}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{
@@ -139,11 +213,6 @@ function HistoryView({ onClose }) {
           <option value="">Select a question</option>
           {questions.map((question, index) => {
             const date = new Date(question.timestamp);
-            console.log('Rendering question:', {
-              text: question.text,
-              timestamp: question.timestamp,
-              parsedDate: date
-            });
             return (
               <option key={index} value={question.text}>
                 {date instanceof Date && !isNaN(date) 
@@ -277,6 +346,9 @@ function HistoryView({ onClose }) {
           </div>
         </div>
       )}
+
+      {/* Add playback controls */}
+      {selectedQuestion && <PlaybackControls />}
 
       {error && (
         <div style={{
