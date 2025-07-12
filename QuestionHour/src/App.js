@@ -11,6 +11,9 @@ import HistoryView from './components/HistoryView';
 import { createGraphData } from './utils/visualizationUtils';
 
 // Map style configurations
+// Get Stadia API key from environment variable
+const STADIA_API_KEY = process.env.REACT_APP_STADIA_API_KEY;
+
 const MAP_STYLES = {
   default: {
     name: "Default",
@@ -19,32 +22,32 @@ const MAP_STYLES = {
   },
   alidade_smooth: {
     name: "Alidade Smooth",
-    url: "https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=YOUR_API_KEY_HERE",
+    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
     attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
   },
   alidade_smooth_dark: {
     name: "Alidade Smooth Dark",
-    url: "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
+    url: `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
     attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
   },
   outdoors: {
     name: "Outdoors",
-    url: "https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png",
+    url: `https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
     attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
   },
   stamen_toner: {
     name: "Stamen Toner",
-    url: "https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png",
+    url: `https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
     attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
   },
   stamen_terrain: {
     name: "Stamen Terrain",
-    url: "https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png",
+    url: `https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
     attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
   },
   stamen_watercolor: {
     name: "Stamen Watercolor",
-    url: "https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}{r}.png",
+    url: `https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
     attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
   }
 };
