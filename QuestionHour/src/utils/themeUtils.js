@@ -1,5 +1,3 @@
-import React from 'react';
-
 // Theme definitions with associated colors, icons, and backgrounds
 export const THEMES = {
   general: {
@@ -167,23 +165,42 @@ export const getVoteButtonStyles = (theme, type) => {
     boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
   };
 
+  // Use themeConfig color for hover effects
+  const agreeGradient = `linear-gradient(135deg, ${themeConfig.color} 0%, ${adjustColor(themeConfig.color, -20)} 100%)`;
+  const disagreeGradient = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+
   if (type === 'agree') {
     return {
       ...baseStyle,
-      background: 'linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)',
+      background: agreeGradient,
       '&:hover': {
         transform: 'translateY(-2px)',
-        boxShadow: '0 4px 10px rgba(46, 204, 113, 0.4)',
+        boxShadow: `0 4px 10px ${themeConfig.color}66`, // Add 66 for 40% opacity
       }
     };
   }
 
   return {
     ...baseStyle,
-    background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
+    background: disagreeGradient,
     '&:hover': {
       transform: 'translateY(-2px)',
       boxShadow: '0 4px 10px rgba(231, 76, 60, 0.4)',
     }
   };
-}; 
+};
+
+// Helper function to darken/lighten colors
+function adjustColor(color, amount) {
+  const hex = color.replace('#', '');
+  const num = parseInt(hex, 16);
+  let r = (num >> 16) + amount;
+  let g = ((num >> 8) & 0x00FF) + amount;
+  let b = (num & 0x0000FF) + amount;
+  
+  r = Math.min(Math.max(0, r), 255);
+  g = Math.min(Math.max(0, g), 255);
+  b = Math.min(Math.max(0, b), 255);
+  
+  return `#${(b | (g << 8) | (r << 16)).toString(16).padStart(6, '0')}`;
+} 
