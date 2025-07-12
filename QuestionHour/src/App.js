@@ -400,96 +400,85 @@ function App() {
         </button>
       </div>
 
-      {/* Collapsible Stats Panel */}
+      {/* Bottom Stats Panel */}
       <div style={{
         position: 'fixed',
-        top: '0',
-        right: showStatsPanel ? '0' : '-300px',
-        width: '300px',
-        height: '100vh',
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        boxShadow: showStatsPanel ? '0 0 20px rgba(0,0,0,0.2)' : 'none',
+        bottom: showStatsPanel ? '20px' : '-100px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 'auto',
+        minWidth: '600px',
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        boxShadow: '0 0 30px rgba(0, 0, 0, 0.3)',
         zIndex: 999,
-        transition: 'right 0.3s ease',
-        padding: '20px',
-        overflowY: 'auto',
-        backdropFilter: 'blur(10px)'
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        padding: '15px 30px',
+        borderRadius: '20px',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(10px)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '30px'
       }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-          paddingBottom: '15px',
-          borderBottom: '2px solid #eee'
-        }}>
-          <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#333' }}>Response Statistics</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff', whiteSpace: 'nowrap' }}>Live Stats</h3>
+            <div style={{ 
+              display: 'flex',
+              gap: '20px',
+              alignItems: 'center',
+              borderLeft: '1px solid rgba(255, 255, 255, 0.2)',
+              paddingLeft: '20px'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.agreeCount}</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Agree</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#f44336', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.disagreeCount}</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Disagree</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#2196F3', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.totalResponses}</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Total</div>
+              </div>
+            </div>
+          </div>
+          
+          {responseStats.mostActiveZip.zip && (
+            <div style={{ 
+              borderLeft: '1px solid rgba(255, 255, 255, 0.2)',
+              paddingLeft: '20px'
+            }}>
+              <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Most Active ZIP</div>
+              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostActiveZip.zip}</div>
+              <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.8rem' }}>{responseStats.mostActiveZip.count} responses</div>
+            </div>
+          )}
+          
           <button
             onClick={() => setShowStatsPanel(false)}
             style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '20px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '50%',
+              width: '30px',
+              height: '30px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: 'pointer',
-              color: '#666',
-              padding: '5px'
+              color: '#fff',
+              fontSize: '18px',
+              padding: 0,
+              transition: 'all 0.2s ease',
+              ':hover': {
+                background: 'rgba(255, 255, 255, 0.2)'
+              }
             }}
           >
             ×
           </button>
-        </div>
-        
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            padding: '15px',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '8px',
-            marginBottom: '10px'
-          }}>
-            <span style={{ color: 'green', fontWeight: 'bold', fontSize: '1.1rem' }}>Agree</span>
-            <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.agreeCount}</span>
-          </div>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            padding: '15px',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '8px',
-            marginBottom: '10px'
-          }}>
-            <span style={{ color: 'red', fontWeight: 'bold', fontSize: '1.1rem' }}>Disagree</span>
-            <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.disagreeCount}</span>
-          </div>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            padding: '15px',
-            backgroundColor: '#e9ecef',
-            borderRadius: '8px',
-            border: '2px solid #007bff'
-          }}>
-            <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Total</span>
-            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#007bff' }}>{responseStats.totalResponses}</span>
-          </div>
-        </div>
-        
-        {responseStats.mostActiveZip.zip && (
-          <div style={{ 
-            padding: '15px',
-            backgroundColor: '#fff3cd',
-            borderRadius: '8px',
-            border: '1px solid #ffeaa7'
-          }}>
-            <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#856404' }}>Most Active ZIP Code</div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#333' }}>{responseStats.mostActiveZip.zip}</div>
-            <div style={{ color: '#666', fontSize: '0.9rem' }}>{responseStats.mostActiveZip.count} responses</div>
-          </div>
-        )}
       </div>
 
       <div style={{
