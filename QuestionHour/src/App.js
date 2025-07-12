@@ -2,11 +2,52 @@ import './App.css';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import ThemedQuestion from './components/ThemedQuestion';
+import { getVoteButtonStyles } from './utils/themeUtils';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
 import { api } from './services/api';
 import HistoryView from './components/HistoryView';
 import { createGraphData } from './utils/visualizationUtils';
+
+// Map style configurations
+const MAP_STYLES = {
+  default: {
+    name: "Default",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  },
+  alidade_smooth: {
+    name: "Alidade Smooth",
+    url: "https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=YOUR_API_KEY_HERE",
+    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+  },
+  alidade_smooth_dark: {
+    name: "Alidade Smooth Dark",
+    url: "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
+    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+  },
+  outdoors: {
+    name: "Outdoors",
+    url: "https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png",
+    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+  },
+  stamen_toner: {
+    name: "Stamen Toner",
+    url: "https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png",
+    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+  },
+  stamen_terrain: {
+    name: "Stamen Terrain",
+    url: "https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png",
+    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+  },
+  stamen_watercolor: {
+    name: "Stamen Watercolor",
+    url: "https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}{r}.png",
+    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+  }
+};
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -83,6 +124,8 @@ function App() {
   const markerRefs = useRef({});
   const [showHistory, setShowHistory] = useState(false);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
+  // Add new state for selected map style
+  const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_watercolor');
 
   // Function to fetch current question
   const fetchCurrentQuestion = useCallback(async () => {
@@ -318,23 +361,10 @@ function App() {
         </button>
       </div>
 
-      <div className="question-box" style={{
-        margin: '30px auto 10px auto',
-        padding: '20px',
-        maxWidth: '600px',
-        background: '#f9f9f9',
-        borderRadius: '12px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-        fontSize: '1.4rem',
-        fontWeight: 'bold',
-        textAlign: 'center',
-        color: '#333'
-      }}>
-        {/* <div style={{ color: THEME_COLOR, marginBottom: '10px' }}>
-          Theme: {QUESTION_THEME.charAt(0).toUpperCase() + QUESTION_THEME.slice(1)}
-        </div> */}
-        Question of the Day: {currentQuestion.text}
-      </div>
+      <ThemedQuestion 
+        question={currentQuestion.text} 
+        theme={currentQuestion.theme || 'general'} 
+      />
 
       {/* Stats Panel Toggle Button */}
       <div style={{
@@ -488,14 +518,8 @@ function App() {
         <button 
           onClick={() => addVote("agree")} 
           style={{ 
-            backgroundColor: "green", 
-            padding: '10px 20px',
-            borderRadius: '5px',
-            border: 'none',
-            color: 'white',
-            cursor: 'pointer',
+            ...getVoteButtonStyles(currentQuestion.theme || 'general', 'agree'),
             opacity: !userLocation ? 0.5 : 1,
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}
           disabled={!userLocation}
         >
@@ -504,14 +528,8 @@ function App() {
         <button 
           onClick={() => addVote("disagree")} 
           style={{ 
-            backgroundColor: "red", 
-            padding: '10px 20px',
-            borderRadius: '5px',
-            border: 'none',
-            color: 'white',
-            cursor: 'pointer',
+            ...getVoteButtonStyles(currentQuestion.theme || 'general', 'disagree'),
             opacity: !userLocation ? 0.5 : 1,
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}
           disabled={!userLocation}
         >
@@ -605,6 +623,32 @@ function App() {
           />
         </div>
         <div className="map-visualization">
+          {/* Add map style selector */}
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            zIndex: 1000,
+            background: 'white',
+            padding: '5px',
+            borderRadius: '5px',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+          }}>
+            <select 
+              value={selectedMapStyle}
+              onChange={(e) => setSelectedMapStyle(e.target.value)}
+              style={{
+                padding: '5px',
+                borderRadius: '3px',
+                border: '1px solid #ccc'
+              }}
+            >
+              {Object.entries(MAP_STYLES).map(([key, style]) => (
+                <option key={key} value={key}>{style.name}</option>
+              ))}
+            </select>
+          </div>
+          
           <MapContainer
             ref={mapRef}
             center={[37.0902, -95.7129]}
@@ -615,8 +659,8 @@ function App() {
             }}
           >
             <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url={MAP_STYLES[selectedMapStyle].url}
+              attribution={MAP_STYLES[selectedMapStyle].attribution}
             />
             {mapPoints.map(point => (
               <CircleMarker
