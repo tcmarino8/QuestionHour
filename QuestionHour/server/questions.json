@@ -1,0 +1,29 @@
+[
+  { "theme": "science_nature", "text": "Climate change is the greatest threat to humanity today." },
+  { "theme": "science_nature", "text": "Genetically modified foods are safe for human consumption." },
+  { "theme": "science_nature", "text": "Space exploration should be a top priority for governments." },
+
+  { "theme": "history_politics", "text": "History is more important than current events in shaping society." },
+  { "theme": "history_politics", "text": "Democracy is the best form of government." },
+  { "theme": "history_politics", "text": "Learning about past wars helps prevent future conflicts." },
+
+  { "theme": "technology_innovation", "text": "Artificial intelligence will create more jobs than it eliminates." },
+  { "theme": "technology_innovation", "text": "Social media has improved communication in society." },
+  { "theme": "technology_innovation", "text": "Self-driving cars will be safer than human drivers." },
+
+  { "theme": "arts_culture", "text": "Art should be publicly funded." },
+  { "theme": "arts_culture", "text": "Classical music is more valuable than modern pop music." },
+  { "theme": "arts_culture", "text": "Street art is a legitimate form of artistic expression." },
+
+  { "theme": "society_ethics", "text": "Social media does more harm than good." },
+  { "theme": "society_ethics", "text": "Wealth should be redistributed to reduce inequality." },
+  { "theme": "society_ethics", "text": "Privacy is more important than security." },
+
+  { "theme": "pop_culture", "text": "Reality TV has a negative impact on society." },
+  { "theme": "pop_culture", "text": "Celebrity culture distracts from important issues." },
+  { "theme": "pop_culture", "text": "Video games are a valuable form of entertainment." },
+
+  { "theme": "reflection", "text": "I made meaningful progress toward my goals this week." },
+  { "theme": "reflection", "text": "I felt connected to my community this week." },
+  { "theme": "reflection", "text": "I learned something new about myself this week." }
+] 
