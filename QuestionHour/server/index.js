@@ -3,11 +3,17 @@ const express = require('express');
 const neo4j = require('neo4j-driver');
 const cors = require('cors');
 const path = require('path');
-
 const app = express();
+const fs = require('fs');
+const cron = require('node-cron');
+let fetch;
+(async () => {
+  fetch = (await import('node-fetch')).default;
+})();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
 
 // Neo4j connection
 let driver;
@@ -206,6 +212,44 @@ app.get('/api/questions/current', async (req, res) => {
   }
 });
 
+
+
+
+// Two-word themes, in order: Sunday (0) to Saturday (6)
+const themes = [
+  'reflection',           // Sunday
+  'science_nature',       // Monday
+  'history_politics',     // Tuesday
+  'technology_innovation',// Wednesday
+  'arts_culture',         // Thursday
+  'society_ethics',       // Friday
+  'pop_culture'           // Saturday
+];
+
+function getTodayTheme() {
+  const day = new Date().getDay(); // 0 = Sunday, 1 = Monday, ...
+  return themes[day];
+}
+
+async function setQuestionOfTheDay() {
+  const theme = getTodayTheme();
+  const questionsPath = path.join(__dirname, 'questions.json');
+  const questions = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
+  const filtered = questions.filter(q => q.theme === theme);
+  if (filtered.length === 0) {
+    console.log('No questions found for theme:', theme);
+    return;
+  }
+  const selected = filtered[Math.floor(Math.random() * filtered.length)];
+  return selected
+}
+// Run at midnight PST every day
+cron.schedule('0 0 * * *', setQuestionOfTheDay, {
+  timezone: 'America/Los_Angeles'
+});
+
+console.log(setQuestionOfTheDay())
+
 // Set new current question
 app.post('/api/questions/current', async (req, res) => {
   console.log('POST /api/questions/current - Request received');
@@ -244,7 +288,10 @@ app.post('/api/questions/current', async (req, res) => {
     `;
     
     console.log('Creating/updating new current question');
-    const result = await runQuery(createQuery, { text, theme });
+    console.log(setQuestionOfTheDay());
+    const QofDay =await setQuestionOfTheDay();
+    console.log(QofDay);
+    const result = await runQuery(createQuery, QofDay);
     console.log('Query result:', result);
     
     const questionData = result[0].get('q').properties;
