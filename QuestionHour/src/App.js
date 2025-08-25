@@ -128,7 +128,7 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
   // Add new state for selected map style
-  const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_watercolor');
+  const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_toner');
 
   // Function to fetch current question
   const fetchCurrentQuestion = useCallback(async () => {
