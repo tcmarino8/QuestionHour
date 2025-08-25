@@ -223,32 +223,90 @@ const themes = [
   'technology_innovation',// Wednesday
   'arts_culture',         // Thursday
   'society_ethics',       // Friday
-  'pop_culture'           // Saturday
+  'sports'                // Saturday
 ];
 
 function getTodayTheme() {
-  const day = new Date().getDay(); // 0 = Sunday, 1 = Monday, ...
+  // Compute day of week in Los Angeles timezone regardless of server locale
+  const laNowString = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+  const laNow = new Date(laNowString);
+  const day = laNow.getDay(); // 0 = Sunday, 1 = Monday, ...
   return themes[day];
 }
 
 async function setQuestionOfTheDay() {
   const theme = getTodayTheme();
+
+  // Always archive any existing current question
+  const archiveQuery = `
+      MATCH (q:Question {current: true})
+      SET q.current = false,
+          q.timestamp = datetime()
+      RETURN q
+    `;
+  try {
+    await runQuery(archiveQuery);
+  } catch (e) {
+    console.error('Error archiving current question during scheduler:', e);
+  }
+
+  // Sunday: Reflection day — set a reflection placeholder instead of a debate question
+  if (theme === 'reflection') {
+    const reflectionText = 'Reflection Day: Review this week\'s questions and your answers.';
+    const createReflectionQuery = `
+      MERGE (q:Question {text: $text})
+      SET q.current = true,
+          q.theme = $theme,
+          q.timestamp = datetime(),
+          q.totalResponses = 0,
+          q.agreeCount = 0,
+          q.disagreeCount = 0
+      RETURN q
+    `;
+    try {
+      await runQuery(createReflectionQuery, { text: reflectionText, theme });
+      return { text: reflectionText, theme };
+    } catch (e) {
+      console.error('Error creating reflection day placeholder:', e);
+      return null;
+    }
+  }
+
+  // Other days: pick a question from the local pool by theme
   const questionsPath = path.join(__dirname, 'questions.json');
   const questions = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
   const filtered = questions.filter(q => q.theme === theme);
   if (filtered.length === 0) {
     console.log('No questions found for theme:', theme);
-    return;
+    return null;
   }
   const selected = filtered[Math.floor(Math.random() * filtered.length)];
-  return selected
+
+  const createQuery = `
+      MERGE (q:Question {text: $text})
+      SET q.current = true,
+          q.theme = $theme,
+          q.timestamp = datetime(),
+          q.totalResponses = 0,
+          q.agreeCount = 0,
+          q.disagreeCount = 0
+      RETURN q
+    `;
+  try {
+    await runQuery(createQuery, { text: selected.text, theme: selected.theme });
+    return selected;
+  } catch (e) {
+    console.error('Error creating scheduled question of the day:', e);
+    return null;
+  }
 }
 // Run at midnight PST every day
 cron.schedule('0 0 * * *', setQuestionOfTheDay, {
   timezone: 'America/Los_Angeles'
 });
 
-console.log(setQuestionOfTheDay())
+// Also run once on server start to ensure there is a current item
+setQuestionOfTheDay();
 
 // Set new current question
 app.post('/api/questions/current', async (req, res) => {
@@ -288,10 +346,7 @@ app.post('/api/questions/current', async (req, res) => {
     `;
     
     console.log('Creating/updating new current question');
-    console.log(setQuestionOfTheDay());
-    const QofDay =await setQuestionOfTheDay();
-    console.log(QofDay);
-    const result = await runQuery(createQuery, QofDay);
+    const result = await runQuery(createQuery, { text, theme });
     console.log('Query result:', result);
     
     const questionData = result[0].get('q').properties;
