@@ -6,54 +6,48 @@ export const THEMES = {
     background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
     animation: 'pulse',
   },
-  technology: {
-    color: '#2196F3',
-    icon: '💻',
-    background: 'linear-gradient(135deg, #0c2461 0%, #1e3799 100%)',
-    animation: 'float',
+  science_nature: {
+    color: "#4CAF50",
+    icon: "🌱",
+    background: "linear-gradient(135deg, #134e5e 0%, #71b280 100%)",
+    animation: "rotate",
   },
-  society: {
-    color: '#9C27B0',
-    icon: '👥',
-    background: 'linear-gradient(135deg, #6a0572 0%, #ab83a1 100%)',
-    animation: 'wave',
+  history_politics: {
+    color: "#F44336", 
+    icon: "🏛️",
+    background: "linear-gradient(135deg, #780206 0%, #061161 100%)",
+    animation: "shake",
   },
-  environment: {
-    color: '#4CAF50',
-    icon: '🌍',
-    background: 'linear-gradient(135deg, #134e5e 0%, #71b280 100%)',
-    animation: 'rotate',
+  technology_innovation: {
+    color: "#2196F3",
+    icon: "💻", 
+    background: "linear-gradient(135deg, #0c2461 0%, #1e3799 100%)",
+    animation: "float",
   },
-  politics: {
-    color: '#F44336',
-    icon: '🏛️',
-    background: 'linear-gradient(135deg, #780206 0%, #061161 100%)',
-    animation: 'shake',
+  arts_culture: {
+    color: "#FF9800",
+    icon: "🎭",
+    background: "linear-gradient(135deg, #cc2b5e 0%, #753a88 100%)", 
+    animation: "bounce",
   },
-  culture: {
-    color: '#FF9800',
-    icon: '🎭',
-    background: 'linear-gradient(135deg, #cc2b5e 0%, #753a88 100%)',
-    animation: 'bounce',
+  society_ethics: {
+    color: "#9C27B0",
+    icon: "🤝",
+    background: "linear-gradient(135deg, #6a0572 0%, #ab83a1 100%)",
+    animation: "wave",
   },
-  science: {
-    color: '#00BCD4',
-    icon: '🔬',
-    background: 'linear-gradient(135deg, #2C3E50 0%, #3498DB 100%)',
-    animation: 'zoom',
+  sports: {
+    color: "#FF5722",
+    icon: "⚽",
+    background: "linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)",
+    animation: "pulse",
   },
-  health: {
-    color: '#E91E63',
-    icon: '❤️',
-    background: 'linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)',
-    animation: 'pulse',
+  reflection: {
+    color: "#9C27B0",
+    icon: "🧘",
+    background: "linear-gradient(135deg, #6a0572 0%, #ab83a1 100%)",
+    animation: "wave",
   },
-  education: {
-    color: '#795548',
-    icon: '📚',
-    background: 'linear-gradient(135deg, #373B44 0%, #4286f4 100%)',
-    animation: 'slide',
-  }
 };
 
 // CSS Keyframes for animations
@@ -128,12 +122,22 @@ export const getQuestionBoxStyles = (theme) => {
       animation: `${themeConfig.animation} 3s infinite ease-in-out`,
       border: `2px solid ${themeConfig.color}`,
     },
-    icon: {
+    infoIcon: {
       position: 'absolute',
       top: '15px',
-      left: '15px',
-      fontSize: '28px',
-      filter: 'drop-shadow(0 0 8px rgba(255, 255, 255, 0.5))',
+      right: '15px',
+      fontSize: '20px',
+      color: themeConfig.color,
+      cursor: 'pointer',
+      padding: '5px',
+      borderRadius: '50%',
+      transition: 'all 0.3s ease',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '30px',
+      height: '30px',
+      background: 'rgba(255, 255, 255, 0.1)',
     },
     theme: {
       position: 'absolute',

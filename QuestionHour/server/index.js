@@ -367,7 +367,7 @@ app.post('/api/news/generate-question', async (req, res) => {
 
     const apiKey = process.env.OPENAI_API_KEY;
     const themeId = getTodayTheme();
-    const naturalTheme = theme && theme.trim().length > 0 ? theme : themeIdToNatural(themeId);
+    // const naturalTheme = theme && theme.trim().length > 0 ? theme : themeIdToNatural(themeId);
 
     // Fallback if no API key: create a simple neutral question template
     if (!apiKey) {
@@ -412,6 +412,20 @@ app.post('/api/news/generate-question', async (req, res) => {
     if (!question) {
       return res.status(502).json({ error: 'No question generated' });
     }
+
+    const sourcesJson = JSON.stringify(headlines.slice(0, 5));
+    const createQuery = `
+      MERGE (q:Question {text: $text})
+      SET q.current = true,
+          q.theme = $theme,
+          q.timestamp = datetime(),
+          q.totalResponses = 0,
+          q.agreeCount = 0,
+          q.disagreeCount = 0,
+          q.sourcesJson = $sourcesJson
+      RETURN q
+    `;
+    await runQuery(createQuery, { text: question, theme, sourcesJson });
 
     return res.json({ themeId, naturalTheme, question, headlines });
   } catch (e) {
@@ -529,6 +543,7 @@ async function setQuestionOfTheDay() {
     if (headlines && headlines.length > 0) {
       const questionText = await generateQuestionFromHeadlines(headlines, naturalTheme);
       if (questionText && questionText.length > 0) {
+        const sourcesJson = JSON.stringify(headlines.slice(0, 5));
         const createQuery = `
           MERGE (q:Question {text: $text})
           SET q.current = true,
@@ -536,10 +551,11 @@ async function setQuestionOfTheDay() {
               q.timestamp = datetime(),
               q.totalResponses = 0,
               q.agreeCount = 0,
-              q.disagreeCount = 0
+              q.disagreeCount = 0,
+              q.sourcesJson = $sourcesJson
           RETURN q
         `;
-        await runQuery(createQuery, { text: questionText, theme });
+        await runQuery(createQuery, { text: questionText, theme, sourcesJson });
         return { text: questionText, theme };
       }
     }
@@ -556,18 +572,28 @@ async function setQuestionOfTheDay() {
   }
   const selected = filtered[Math.floor(Math.random() * filtered.length)];
 
-  const createQuery = `
-      MERGE (q:Question {text: $text})
-      SET q.current = true,
-          q.theme = $theme,
-          q.timestamp = datetime(),
-          q.totalResponses = 0,
-          q.agreeCount = 0,
-          q.disagreeCount = 0
-      RETURN q
-    `;
+  const naturalThemeFallback = themeIdToNatural(selected.theme);
+  let headlines = [];
   try {
-    await runQuery(createQuery, { text: selected.text, theme: selected.theme });
+    headlines = await fetchHeadlinesForTheme(naturalThemeFallback);
+  } catch (e) {
+    console.warn('Could not fetch fallback headlines:', e.message || e);
+  }
+  const sourcesJson = JSON.stringify((headlines || []).slice(0, 5));
+
+  const createQuery = `
+    MERGE (q:Question {text: $text})
+    SET q.current = true,
+        q.theme = $theme,
+        q.timestamp = datetime(),
+        q.totalResponses = 0,
+        q.agreeCount = 0,
+        q.disagreeCount = 0,
+        q.sourcesJson = $sourcesJson
+    RETURN q
+  `;
+  try {
+    await runQuery(createQuery, { text: selected.text, theme: selected.theme, sourcesJson });
     return selected;
   } catch (e) {
     console.error('Error creating scheduled question of the day (fallback):', e);
@@ -742,6 +768,7 @@ app.post('/api/admin/generate-today', async (req, res) => {
     res.status(500).json({ ok: false, error: e.message || 'failed' });
   }
 });
+
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
