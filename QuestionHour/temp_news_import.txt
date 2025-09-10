@@ -1,0 +1,2 @@
+﻿// Add NewsPanel import after line 10
+import NewsPanel from './components/NewsPanel';

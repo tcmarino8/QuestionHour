@@ -1,0 +1,12 @@
+﻿import './App.css';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import ForceGraph3D from 'react-force-graph-3d';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import ThemedQuestion from './components/ThemedQuestion';
+import { getVoteButtonStyles } from './utils/themeUtils';
+import 'leaflet/dist/leaflet.css';
+import L from "leaflet";
+import { api } from './services/api';
+import HistoryView from './components/HistoryView';
+import NewsPanel from './components/NewsPanel';
+import { createGraphData } from './utils/visualizationUtils';

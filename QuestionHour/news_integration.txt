@@ -1,0 +1,40 @@
+﻿// Add after line 10 (after HistoryView import)
+import NewsPanel from './components/NewsPanel';
+
+// Add after line 131 (after selectedMapStyle state)
+const [showNewsPanel, setShowNewsPanel] = useState(false);
+const [newsTopic, setNewsTopic] = useState('');
+const [newsBias, setNewsBias] = useState('');
+const [newsLocation, setNewsLocation] = useState('');
+
+// Add after the Reset View button (around line 544)
+<button 
+  onClick={() => {
+    setNewsTopic(currentQuestion.text);
+    setNewsBias('balanced'); // or extract from question theme
+    setNewsLocation(userLocation?.zip || 'United States');
+    setShowNewsPanel(true);
+  }}
+  style={{ 
+    padding: '10px 20px',
+    borderRadius: '5px',
+    border: '1px solid #ccc',
+    cursor: 'pointer',
+    backgroundColor: '#28a745',
+    color: 'white',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+  }}
+>
+  Related News
+</button>
+
+// Add before the closing </div> of the main App component (around line 696)
+{showNewsPanel && (
+  <NewsPanel
+    topic={newsTopic}
+    bias={newsBias}
+    location={newsLocation}
+    isVisible={showNewsPanel}
+    onClose={() => setShowNewsPanel(false)}
+  />
+)}

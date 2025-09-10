@@ -214,7 +214,6 @@ app.get('/api/questions/current', async (req, res) => {
 
 
 
-
 // Two-word themes, in order: Sunday (0) to Saturday (6)
 const themes = [
   'reflection',           // Sunday
@@ -233,6 +232,193 @@ function getTodayTheme() {
   const day = laNow.getDay(); // 0 = Sunday, 1 = Monday, ...
   return themes[day];
 }
+
+function themeIdToNatural(themeId) {
+  // Convert snake_case to natural phrase, e.g., "science_nature" -> "science and nature"
+  // Simple rule: replace '_' with ' and ' for two-part ids; fallback to spaces otherwise
+  if (!themeId) return '';
+  const parts = themeId.split('_');
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return themeId.replace(/_/g, ' ');
+}
+
+// Testable endpoint: returns today's theme id and natural-language text
+app.get('/api/themes/today', (req, res) => {
+  try {
+    const id = getTodayTheme();
+    const natural = themeIdToNatural(id);
+    res.json({ id, natural });
+  } catch (e) {
+    console.error('Error resolving today\'s theme:', e);
+    res.status(500).json({ error: 'Failed to resolve today\'s theme' });
+  }
+});
+
+// Fetch 5 recent Google News headlines for a theme (server-side)
+app.get('/api/news/headlines', async (req, res) => {
+  try {
+    const themeParam = req.query.theme; // natural language optional override
+    const location = req.query.location; // optional, e.g., "United States" or city/state
+
+    const themeId = getTodayTheme();
+    const naturalTheme = themeParam && themeParam.trim().length > 0 ? themeParam : themeIdToNatural(themeId);
+
+    const queryParts = [naturalTheme];
+    if (location && location.trim().length > 0) {
+      queryParts.push(`in ${location.trim()}`);
+    }
+    // Favor fresh coverage
+    queryParts.unshift('latest');
+
+    const searchQuery = encodeURIComponent(queryParts.join(' '));
+    const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en`;
+
+    if (!fetch) {
+      fetch = (await import('node-fetch')).default;
+    }
+    const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
+    if (!resp.ok) {
+      return res.status(502).json({ error: 'Failed to fetch Google News', status: resp.status });
+    }
+    const html = await resp.text();
+
+    // Very light-weight parsing from the HTML. Google markup can change, so keep defensive.
+    // Strategy: split by <article and extract title via aria-label="More - ...", link via first href, source via data-n-tid="9">...
+    const items = html.split('<article').slice(1);
+    const headlines = [];
+    const seenTitles = new Set();
+
+    for (const raw of items) {
+      const item = '<article' + raw; // restore tag for regex context
+      const titleMatch = item.match(/aria-label="More\s-\s(.*?)"/);
+      const sourceMatch = item.match(/data-n-tid="9">(.*?)<\/div>/);
+      const hrefMatch = item.match(/href="(.*?)"/);
+
+      const title = titleMatch ? titleMatch[1] : null;
+      if (!title || seenTitles.has(title)) continue;
+
+      let link = hrefMatch ? hrefMatch[1] : null;
+      if (!link) continue;
+      if (link.startsWith('.')) {
+        link = 'https://news.google.com' + link.substring(1);
+      }
+
+      const source = sourceMatch ? sourceMatch[1] : '';
+
+      headlines.push({ title, source, link });
+      seenTitles.add(title);
+      if (headlines.length >= 5) break;
+    }
+
+    return res.json({ themeId, naturalTheme, count: headlines.length, headlines });
+  } catch (e) {
+    console.error('Error fetching headlines:', e);
+    return res.status(500).json({ error: 'Failed to fetch headlines' });
+  }
+});
+
+// Generate a neutral, concise question from up to 5 headlines using an LLM
+app.post('/api/news/generate-question', async (req, res) => {
+  try {
+    const { headlines: providedHeadlines, theme, location } = req.body || {};
+
+    // Get headlines if not provided
+    let headlines = Array.isArray(providedHeadlines) ? providedHeadlines.slice(0, 5) : null;
+    if (!headlines || headlines.length === 0) {
+      // Reuse local endpoint logic by calling the function directly
+      const themeId = getTodayTheme();
+      const naturalTheme = theme && theme.trim().length > 0 ? theme : themeIdToNatural(themeId);
+
+      const queryParts = ['latest', naturalTheme];
+      if (location && String(location).trim().length > 0) queryParts.push(`in ${String(location).trim()}`);
+      const searchQuery = encodeURIComponent(queryParts.join(' '));
+      const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en`;
+
+      if (!fetch) {
+        fetch = (await import('node-fetch')).default;
+      }
+      const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
+      if (!resp.ok) {
+        return res.status(502).json({ error: 'Failed to fetch Google News', status: resp.status });
+      }
+      const html = await resp.text();
+      const items = html.split('<article').slice(1);
+      const parsed = [];
+      const seen = new Set();
+      for (const raw of items) {
+        const item = '<article' + raw;
+        const titleMatch = item.match(/aria-label="More\s-\s(.*?)"/);
+        const hrefMatch = item.match(/href="(.*?)"/);
+        const title = titleMatch ? titleMatch[1] : null;
+        if (!title || seen.has(title)) continue;
+        let link = hrefMatch ? hrefMatch[1] : null;
+        if (!link) continue;
+        if (link.startsWith('.')) link = 'https://news.google.com' + link.substring(1);
+        parsed.push({ title, link });
+        seen.add(title);
+        if (parsed.length >= 5) break;
+      }
+      headlines = parsed;
+    }
+
+    if (!headlines || headlines.length === 0) {
+      return res.status(400).json({ error: 'No headlines available to generate a question' });
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    const themeId = getTodayTheme();
+    const naturalTheme = theme && theme.trim().length > 0 ? theme : themeIdToNatural(themeId);
+
+    // Fallback if no API key: create a simple neutral question template
+    if (!apiKey) {
+      const firstTitle = headlines[0].title || 'today\'s news';
+      const fallback = `Given recent headlines about ${naturalTheme}, including \"${firstTitle}\", do you think this topic deserves more public attention right now?`;
+      return res.json({ themeId, naturalTheme, question: fallback, headlines });
+    }
+
+    if (!fetch) {
+      fetch = (await import('node-fetch')).default;
+    }
+
+    const prompt = `You are a helpful assistant that drafts a single, neutral, concise public discussion question (max 140 characters) relevant to current events.\n\nTheme: ${naturalTheme}\nHeadlines:\n${headlines.map((h, i) => `- ${h.title}`).join('\n')}\n\nGuidelines:\n- Do not lead or assume facts; avoid yes/no phrasing like \"Do you support...\"\n- Avoid naming individuals unless essential\n- Be broadly applicable to a general audience\n- Output only the question text without quotes.`;
+
+    const body = {
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You generate one concise, neutral civic question from headlines.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.4,
+      max_tokens: 80
+    };
+
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error('OpenAI error:', errText);
+      return res.status(502).json({ error: 'LLM call failed' });
+    }
+
+    const data = await resp.json();
+    const question = data?.choices?.[0]?.message?.content?.trim() || '';
+    if (!question) {
+      return res.status(502).json({ error: 'No question generated' });
+    }
+
+    return res.json({ themeId, naturalTheme, question, headlines });
+  } catch (e) {
+    console.error('Error generating question:', e);
+    return res.status(500).json({ error: 'Failed to generate question' });
+  }
+});
 
 async function setQuestionOfTheDay() {
   const theme = getTodayTheme();
