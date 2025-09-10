@@ -420,6 +420,69 @@ app.post('/api/news/generate-question', async (req, res) => {
   }
 });
 
+// Helpers used by scheduler
+async function fetchHeadlinesForTheme(naturalTheme, location) {
+  const parts = ['latest', naturalTheme];
+  if (location && String(location).trim().length > 0) parts.push(`in ${String(location).trim()}`);
+  const searchQuery = encodeURIComponent(parts.join(' '));
+  const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en`;
+
+  if (!fetch) {
+    fetch = (await import('node-fetch')).default;
+  }
+  const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
+  if (!resp.ok) throw new Error(`Failed to fetch Google News: ${resp.status}`);
+  const html = await resp.text();
+  const items = html.split('<article').slice(1);
+  const headlines = [];
+  const seen = new Set();
+  for (const raw of items) {
+    const item = '<article' + raw;
+    const titleMatch = item.match(/aria-label="More\s-\s(.*?)"/);
+    const hrefMatch = item.match(/href="(.*?)"/);
+    const title = titleMatch ? titleMatch[1] : null;
+    if (!title || seen.has(title)) continue;
+    let link = hrefMatch ? hrefMatch[1] : null;
+    if (!link) continue;
+    if (link.startsWith('.')) link = 'https://news.google.com' + link.substring(1);
+    headlines.push({ title, link });
+    seen.add(title);
+    if (headlines.length >= 5) break;
+  }
+  return headlines;
+}
+
+async function generateQuestionFromHeadlines(headlines, naturalTheme) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    const firstTitle = headlines[0]?.title || 'today\'s news';
+    return `Given recent headlines about ${naturalTheme}, including \"${firstTitle}\", what aspect deserves more public attention right now?`;
+  }
+  if (!fetch) {
+    fetch = (await import('node-fetch')).default;
+  }
+  const prompt = `You are a helpful assistant that drafts a single, neutral, concise public discussion question (max 140 characters) relevant to current events.\n\nTheme: ${naturalTheme}\nHeadlines:\n${headlines.map(h => `- ${h.title}`).join('\n')}\n\nGuidelines:\n- Do not lead or assume facts; avoid yes/no phrasing like \"Do you support...\"\n- Avoid naming individuals unless essential\n- Be broadly applicable to a general audience\n- Output only the question text without quotes.`;
+  const body = {
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: 'You generate one concise, neutral civic question from headlines.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.4,
+    max_tokens: 80
+  };
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) throw new Error('LLM call failed');
+  const data = await resp.json();
+  const question = data?.choices?.[0]?.message?.content?.trim();
+  if (!question) throw new Error('No question text');
+  return question;
+}
+
 async function setQuestionOfTheDay() {
   const theme = getTodayTheme();
 
@@ -458,8 +521,33 @@ async function setQuestionOfTheDay() {
     }
   }
 
-  // Other days: pick a question from the local pool by theme
+  // Other days: try news-driven question first
   const questionsPath = path.join(__dirname, 'questions.json');
+  let naturalTheme = themeIdToNatural(theme);
+  try {
+    const headlines = await fetchHeadlinesForTheme(naturalTheme);
+    if (headlines && headlines.length > 0) {
+      const questionText = await generateQuestionFromHeadlines(headlines, naturalTheme);
+      if (questionText && questionText.length > 0) {
+        const createQuery = `
+          MERGE (q:Question {text: $text})
+          SET q.current = true,
+              q.theme = $theme,
+              q.timestamp = datetime(),
+              q.totalResponses = 0,
+              q.agreeCount = 0,
+              q.disagreeCount = 0
+          RETURN q
+        `;
+        await runQuery(createQuery, { text: questionText, theme });
+        return { text: questionText, theme };
+      }
+    }
+  } catch (e) {
+    console.error('News-driven generation failed, will fallback:', e.message || e);
+  }
+
+  // Fallback: pick a question from the local pool by theme
   const questions = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
   const filtered = questions.filter(q => q.theme === theme);
   if (filtered.length === 0) {
@@ -482,10 +570,11 @@ async function setQuestionOfTheDay() {
     await runQuery(createQuery, { text: selected.text, theme: selected.theme });
     return selected;
   } catch (e) {
-    console.error('Error creating scheduled question of the day:', e);
+    console.error('Error creating scheduled question of the day (fallback):', e);
     return null;
   }
 }
+
 // Run at midnight PST every day
 cron.schedule('0 0 * * *', setQuestionOfTheDay, {
   timezone: 'America/Los_Angeles'
@@ -636,6 +725,22 @@ app.get('/api/health', (req, res) => {
 // Catch-all route - MUST BE LAST
 app.get('/', (req, res) => {
   res.send('Server is running');
+});
+
+// Admin trigger to run generation now (secured by ADMIN_SECRET)
+app.post('/api/admin/generate-today', async (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  const providedSecret = req.headers['x-admin-secret'];
+  if (!adminSecret || providedSecret !== adminSecret) {
+    return res.status(403).json({ error: 'Forbidden: Invalid or missing admin secret.' });
+  }
+  try {
+    const result = await setQuestionOfTheDay();
+    res.json({ ok: true, result });
+  } catch (e) {
+    console.error('Manual generation failed:', e);
+    res.status(500).json({ ok: false, error: e.message || 'failed' });
+  }
 });
 
 const PORT = process.env.PORT || 3001;
