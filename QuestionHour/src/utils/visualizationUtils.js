@@ -1,6 +1,13 @@
 
 
 // Utility functions for visualization
+
+// Function to add random jitter to coordinates
+export const addCoordinateJitter = (coord, maxJitter = 0.01) => {
+  const jitter = (Math.random() - 0.5) * maxJitter;
+  return coord + jitter;
+}; 
+
 export const createGraphData = (question, responses) => {
   // Create question node with unique positioning
   const questionNode = { 
@@ -19,6 +26,9 @@ export const createGraphData = (question, responses) => {
   const points = [];
   const zipStats = {};
   let mostActiveZip = { zip: '', count: 0 };
+  let mostDividedZip = { zip: '', percentAgree: 0, percentDisagree: 0, diff: 1 };
+  let maxAgreeZip = { zip: '', percentAgree: 0 };
+  let maxDisagreeZip = { zip: '', percentDisagree: 0 };
   let agreeCount = 0;
   let disagreeCount = 0;
 
@@ -30,6 +40,25 @@ export const createGraphData = (question, responses) => {
   const BASE_RADIUS = 50;  // Minimum distance from question
   const RADIUS_INCREMENT = 30;  // How much to increase radius per response
   const MAX_RADIUS = 300;  // Maximum distance from question
+
+    // Helper function to update ZIP code statistics
+  const updateZipStats = (response, zipStats) => {
+    if (!zipStats[response.location]) {
+      zipStats[response.location] = {
+        agree: 0,
+        disagree: 0,
+        lat: response.lat,
+        lng: response.lng,
+        total: 0
+      };
+    }
+    if (response.response === 'agree') {
+      zipStats[response.location].agree++;
+    } else {
+      zipStats[response.location].disagree++;
+    }
+    zipStats[response.location].total++;
+  };
 
   // Process agree responses (0-180 degrees)
   agreeResponses.forEach((response, index) => {
@@ -111,18 +140,33 @@ export const createGraphData = (question, responses) => {
     updateZipStats(response, zipStats);
   });
 
-  // Update most active ZIP
-  Object.entries(zipStats).forEach(([zip, stats]) => {
-    if (stats.total > mostActiveZip.count) {
-      mostActiveZip = {
-        zip,
-        count: stats.total
-      };
-    }
-  });
 
-  // Create map points with statistics
+
   Object.entries(zipStats).forEach(([zip, stats]) => {
+    // Most active ZIP
+    if (stats.total > mostActiveZip.count) {
+      mostActiveZip = { zip, count: stats.total };
+    }
+
+    // Most divided, most agree, most disagree
+    const total = stats.agree + stats.disagree;
+    if (total > 0) {
+      const percentAgree = stats.agree / total;
+      const percentDisagree = stats.disagree / total;
+      const diff = Math.abs(percentAgree - 0.5);
+
+      if (diff < mostDividedZip.diff) {
+        mostDividedZip = { zip, percentAgree, percentDisagree, diff };
+      }
+      if (percentAgree > maxAgreeZip.percentAgree) {
+        maxAgreeZip = { zip, percentAgree };
+      }
+      if (percentDisagree > maxDisagreeZip.percentDisagree) {
+        maxDisagreeZip = { zip, percentDisagree };
+      }
+    }
+
+    // Create map point
     points.push({
       id: `zip-${zip}`,
       lat: addCoordinateJitter(stats.lat),
@@ -143,32 +187,50 @@ export const createGraphData = (question, responses) => {
       totalResponses: responses.length,
       agreeCount,
       disagreeCount,
-      mostActiveZip
+      mostActiveZip,
+      mostDividedZip,
+      maxAgreeZip,
+      maxDisagreeZip
     }
   };
-};
 
-// Helper function to update ZIP code statistics
-const updateZipStats = (response, zipStats) => {
-  if (!zipStats[response.location]) {
-    zipStats[response.location] = {
-      agree: 0,
-      disagree: 0,
-      lat: response.lat,
-      lng: response.lng,
-      total: 0
-    };
-  }
-  if (response.response === 'agree') {
-    zipStats[response.location].agree++;
-  } else {
-    zipStats[response.location].disagree++;
-  }
-  zipStats[response.location].total++;
-};
+//   // Update most active ZIP
+//   Object.entries(zipStats).forEach(([zip, stats]) => {
+//     if (stats.total > mostActiveZip.count) {
+//       mostActiveZip = {
+//         zip,
+//         count: stats.total
+//       };
+//     }
+//   });
 
-// Function to add random jitter to coordinates
-export const addCoordinateJitter = (coord, maxJitter = 0.01) => {
-  const jitter = (Math.random() - 0.5) * maxJitter;
-  return coord + jitter;
-}; 
+//   // Create map points with statistics
+//   Object.entries(zipStats).forEach(([zip, stats]) => {
+//     points.push({
+//       id: `zip-${zip}`,
+//       lat: addCoordinateJitter(stats.lat),
+//       lng: addCoordinateJitter(stats.lng),
+//       color: stats.agree >= stats.disagree ? 'green' : 'red',
+//       stats: {
+//         agree: stats.agree,
+//         disagree: stats.disagree,
+//         total: stats.total
+//       }
+//     });
+//   });
+
+//   return {
+//     graphData: { nodes, links },
+//     mapPoints: points,
+//     stats: {
+//       totalResponses: responses.length,
+//       agreeCount,
+//       disagreeCount,
+//       mostActiveZip
+//     }
+//   };
+// };
+
+
+
+};

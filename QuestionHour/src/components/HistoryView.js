@@ -4,6 +4,7 @@ import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { createGraphData } from '../utils/visualizationUtils';
+import {MAP_STYLES, THEME_TO_MAP_STYLE} from '../App';
 
 function HistoryView({ onClose }) {
   const [questions, setQuestions] = useState([]);
@@ -18,7 +19,10 @@ function HistoryView({ onClose }) {
     totalResponses: 0,
     agreeCount: 0,
     disagreeCount: 0,
-    mostActiveZip: { zip: '', count: 0 }
+    mostActiveZip: { zip: '', count: 0 },
+    mostDividedZip: { zip: '', percentAgree: 0, percentDisagree: 0, diff: 1 },
+    maxAgreeZip : { zip: '', percentAgree: 0 },
+    maxDisagreeZip:{ zip: '', percentDisagree: 0 }
   });
 
   // Playback state
@@ -26,6 +30,15 @@ function HistoryView({ onClose }) {
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [visibleResponses, setVisibleResponses] = useState([]);
+  const [showStatsPanel, setShowStatsPanel] = useState(false);
+
+    // Determine map style based on selected question's theme
+  const mapStyle = React.useMemo(() => {
+    if (!selectedQuestion) return 'stamen_toner'; // fallback
+    const theme = (selectedQuestion.theme || 'general').toLowerCase();
+    return THEME_TO_MAP_STYLE[theme] || 'stamen_toner';
+  }, [selectedQuestion]);
+
 
   // Update visualization with visible responses only
   const updateVisibleVisualization = useCallback((question, responses) => {
@@ -131,20 +144,20 @@ function HistoryView({ onClose }) {
 
   // Playback controls component
   const PlaybackControls = () => (
-    <div style={{
-      position: 'fixed',
-      bottom: '20px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      zIndex: 2001,
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      padding: '10px',
-      borderRadius: '8px',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-      display: 'flex',
-      gap: '10px',
-      alignItems: 'center'
-    }}>
+     <div style={{
+    position: 'fixed',
+    bottom: '20px',
+    left: '20px',
+    transform: 'none', // Remove centering
+    zIndex: 2001,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: '10px',
+    borderRadius: '8px',
+    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'center'
+  }}>
       <button
         onClick={() => isPlaying ? setIsPlaying(false) : handlePlay()}
         style={{
@@ -245,8 +258,158 @@ function HistoryView({ onClose }) {
         </button>
       </div>
 
+
+
       {/* Stats Panel */}
-      {selectedQuestion && (
+
+       <div style={{
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        zIndex: 1000
+      }}>
+        <button
+          onClick={() => setShowStatsPanel(!showStatsPanel)}
+          style={{
+            padding: '10px 20px',
+            background: showStatsPanel ? '#666' : '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'background-color 0.3s ease'
+          }}
+        >
+          <span>{showStatsPanel ? 'Hide Stats' : 'Show Stats'}</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d={showStatsPanel ? "M10 6L2 6" : "M2 6L10 6"} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d={showStatsPanel ? "M6 2L6 10" : "M6 2L6 10"} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Bottom Stats Panel */}
+      <div style={{
+        position: 'fixed',
+        bottom: showStatsPanel ? '20px' : '-100px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 'auto',
+        minWidth: '600px',
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        boxShadow: '0 0 30px rgba(0, 0, 0, 0.3)',
+        zIndex: 999,
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        padding: '15px 30px',
+        borderRadius: '20px',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(10px)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '30px'
+      }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff', whiteSpace: 'nowrap' }}>Live Stats</h3>
+            <div style={{ 
+              display: 'flex',
+              gap: '20px',
+              alignItems: 'center',
+              borderLeft: '1px solid rgba(255, 255, 255, 0.2)',
+              paddingLeft: '20px'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.agreeCount}</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Agree</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#f44336', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.disagreeCount}</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Disagree</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#2196F3', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.totalResponses}</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Total</div>
+              </div>
+            </div>
+          </div>
+          {responseStats.mostActiveZip.zip && (
+            <div style={{ 
+              borderLeft: '1px solid rgba(255, 255, 255, 0.2)',
+              paddingLeft: '20px'
+            }}>
+              <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Most Active ZIP</div>
+              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostActiveZip.zip}</div>
+              <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.8rem' }}>{responseStats.mostActiveZip.count} responses</div>
+            </div>
+          )}
+           {responseStats.mostDividedZip.zip && (
+            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Divided ZIP</div>
+              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostDividedZip.zip}</div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
+                {Math.round(responseStats.mostDividedZip.percentAgree * 100)}% Agree / {Math.round(responseStats.mostDividedZip.percentDisagree * 100)}% Disagree
+              </div>
+            </div>
+          )}
+          {responseStats.maxAgreeZip.zip && (
+            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Agree ZIP</div>
+              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxAgreeZip.zip}</div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
+                {Math.round(responseStats.maxAgreeZip.percentAgree * 100)}% Agree
+              </div>
+            </div>
+          )}
+          {responseStats.maxDisagreeZip.zip && (
+            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Disagree ZIP</div>
+              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxDisagreeZip.zip}</div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
+                {Math.round(responseStats.maxDisagreeZip.percentDisagree * 100)}% Disagree
+              </div>
+            </div>
+          )}
+          
+          <button
+            onClick={() => setShowStatsPanel(false)}
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '50%',
+              width: '30px',
+              height: '30px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#fff',
+              fontSize: '18px',
+              padding: 0,
+              transition: 'all 0.2s ease',
+              ':hover': {
+                background: 'rgba(255, 255, 255, 0.2)'
+              }
+            }}
+          >
+            ×
+          </button>
+      </div>
+
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '10px',
+        margin: '20px 0',
+        flexWrap: 'wrap',
+        position: 'relative',
+        zIndex: 900
+      }}></div>
+      {/* {selectedQuestion && (
         <div style={{
           position: 'fixed',
           top: '20px',
@@ -277,7 +440,7 @@ function HistoryView({ onClose }) {
             </div>
           )}
         </div>
-      )}
+      )} */}
 
       {/* Visualizations */}
       {selectedQuestion && (
@@ -314,8 +477,8 @@ function HistoryView({ onClose }) {
               style={{ height: '100%', width: '100%' }}
             >
               <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url={MAP_STYLES[mapStyle].url}
+                attribution={MAP_STYLES[mapStyle].attribution}
               />
               {mapPoints.map(point => (
                 <CircleMarker
@@ -353,14 +516,16 @@ function HistoryView({ onClose }) {
       {error && (
         <div style={{
           position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
+          bottom: '20px',
+          left: '10px', 
+          transform: 'none', 
           backgroundColor: 'white',
           padding: '20px',
           borderRadius: '8px',
           boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-          zIndex: 2002
+          display: 'flex',
+          zIndex: 2001,
+          alignItems: 'center'
         }}>
           <p style={{ color: 'red', margin: 0 }}>{error}</p>
         </div>

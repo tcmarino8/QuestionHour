@@ -1,27 +1,24 @@
 [
-  { "theme": "science_nature", "text": "Climate change is the greatest threat to humanity today." },
-  { "theme": "science_nature", "text": "Genetically modified foods are safe for human consumption." },
+  { "theme": "science_nature", "text": "Urban Greenspaces are an important point of focus for future cities." },
+  { "theme": "science_nature", "text": "I would rather a good looking genetically modified granny smith apple than a bruised one." },
   { "theme": "science_nature", "text": "Space exploration should be a top priority for governments." },
 
   { "theme": "history_politics", "text": "History is more important than current events in shaping society." },
-  { "theme": "history_politics", "text": "Democracy is the best form of government." },
-  { "theme": "history_politics", "text": "Learning about past wars helps prevent future conflicts." },
+  { "theme": "history_politics", "text": "I am often considering the effects of current events on my own life." },
 
   { "theme": "technology_innovation", "text": "Artificial intelligence will create more jobs than it eliminates." },
-  { "theme": "technology_innovation", "text": "Social media has improved communication in society." },
+  { "theme": "technology_innovation", "text": "The way in which social media has brought people closer together is benefitial." },
   { "theme": "technology_innovation", "text": "Self-driving cars will be safer than human drivers." },
 
   { "theme": "arts_culture", "text": "Art should be publicly funded." },
-  { "theme": "arts_culture", "text": "Classical music is more valuable than modern pop music." },
   { "theme": "arts_culture", "text": "Street art is a legitimate form of artistic expression." },
 
-  { "theme": "society_ethics", "text": "Social media does more harm than good." },
-  { "theme": "society_ethics", "text": "Wealth should be redistributed to reduce inequality." },
+
+  { "theme": "society_ethics", "text": "Future urban growth should focus within cities." },
   { "theme": "society_ethics", "text": "Privacy is more important than security." },
 
   { "theme": "sports", "text": "College athletes should be paid salaries by their universities." },
-  { "theme": "sports", "text": "Performance-enhancing drugs should be allowed under medical supervision." },
-  { "theme": "sports", "text": "Professional sports teams should be publicly owned by their cities." },
+  { "theme": "sports", "text": "I'm a fan of sports, but not of a particular team." },
 
   { "theme": "reflection", "text": "I made meaningful progress toward my goals this week." }
 ] 

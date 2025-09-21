@@ -14,7 +14,7 @@ import { createGraphData } from './utils/visualizationUtils';
 // Get Stadia API key from environment variable
 const STADIA_API_KEY = process.env.REACT_APP_STADIA_API_KEY;
 
-const MAP_STYLES = {
+export const MAP_STYLES = {
   default: {
     name: "Default",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -50,6 +50,17 @@ const MAP_STYLES = {
     url: `https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
     attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
   }
+};
+
+export const THEME_TO_MAP_STYLE = {
+  general: 'stamen_toner',      // fallback/default
+  technology_innovation: 'default',
+  history_politics: 'alidade_smooth',
+  science_nature: 'outdoors',
+  society_ethics: 'stamen_terrain',
+  arts_culture: 'stamen_watercolor',
+  sports: 'alidade_smooth_dark',
+  reflection: 'stamen_toner'
 };
 
 // Fix for default marker icons in react-leaflet
@@ -119,7 +130,10 @@ function App() {
     totalResponses: 0,
     agreeCount: 0,
     disagreeCount: 0,
-    mostActiveZip: { zip: '', count: 0 }
+    mostActiveZip: { zip: '', count: 0 },
+    mostDividedZip: { zip: '', percentAgree: 0, percentDisagree: 0, diff: 1 },
+    maxAgreeZip : { zip: '', percentAgree: 0 },
+    maxDisagreeZip:{ zip: '', percentDisagree: 0 }
   });
   const fgRef = useRef(null);
   const mapRef = useRef(null);
@@ -163,6 +177,14 @@ function App() {
       )
     }));
   }, [currentQuestion]);
+
+    // Set map style based on current theme/day
+  useEffect(() => {
+    // Use the theme from the current question, fallback to 'general'
+    const theme = (currentQuestion.theme || 'general').toLowerCase();
+    setSelectedMapStyle(THEME_TO_MAP_STYLE[theme] || 'stamen_toner');
+  }, [currentQuestion.theme]);
+
 
   // Function to get ZIP code from coordinates using Google Places API
   const getZipFromCoordinates = async (lat, lng) => {
@@ -299,6 +321,7 @@ function App() {
       setError('Failed to update visualization');
     }
   }, [currentQuestion]);
+
 
   // Load initial data
   useEffect(() => {
@@ -453,8 +476,37 @@ function App() {
               <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Most Active ZIP</div>
               <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostActiveZip.zip}</div>
               <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.8rem' }}>{responseStats.mostActiveZip.count} responses</div>
+              </div>
+                )}
+          {responseStats.mostDividedZip.zip && (
+            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Divided ZIP</div>
+              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostDividedZip.zip}</div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
+                {Math.round(responseStats.mostDividedZip.percentAgree * 100)}% Agree / {Math.round(responseStats.mostDividedZip.percentDisagree * 100)}% Disagree
+              </div>
             </div>
           )}
+          {responseStats.maxAgreeZip.zip && (
+            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Agree ZIP</div>
+              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxAgreeZip.zip}</div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
+                {Math.round(responseStats.maxAgreeZip.percentAgree * 100)}% Agree
+              </div>
+            </div>
+          )}
+          {responseStats.maxDisagreeZip.zip && (
+            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Disagree ZIP</div>
+              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxDisagreeZip.zip}</div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
+                {Math.round(responseStats.maxDisagreeZip.percentDisagree * 100)}% Disagree
+              </div>
+            </div>
+          )}
+            
+
           
           <button
             onClick={() => setShowStatsPanel(false)}
@@ -626,7 +678,7 @@ function App() {
             borderRadius: '5px',
             boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
           }}>
-            <select 
+            {/* <select 
               value={selectedMapStyle}
               onChange={(e) => setSelectedMapStyle(e.target.value)}
               style={{
@@ -638,7 +690,7 @@ function App() {
               {Object.entries(MAP_STYLES).map(([key, style]) => (
                 <option key={key} value={key}>{style.name}</option>
               ))}
-            </select>
+            </select> */}
           </div>
           
           <MapContainer
