@@ -1,4 +1,6 @@
-// Theme definitions with associated colors, icons, and backgrounds
+
+
+// Theme definitions with associated colors, icons, backgrounds, and animations
 export const THEMES = {
   general: {
     color: '#4CAF50',

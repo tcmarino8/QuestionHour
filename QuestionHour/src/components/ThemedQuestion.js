@@ -164,7 +164,7 @@ const ThemedQuestion = ({ question, theme }) => {
               ×
             </button>
             <h2 style={{ marginTop: 0, color: themeConfig.color }}>
-              News Sources for Today's Question
+              News Related to Today's Question
             </h2>
             {loadingNews ? (
               <p>Loading news sources...</p>
