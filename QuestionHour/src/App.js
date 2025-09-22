@@ -426,7 +426,7 @@ function App() {
       {/* Bottom Stats Panel */}
       <div style={{
         position: 'fixed',
-        bottom: showStatsPanel ? '20px' : '-100px',
+        bottom: showStatsPanel ? '20px' : '-400px',
         left: '50%',
         transform: 'translateX(-50%)',
         width: 'auto',
