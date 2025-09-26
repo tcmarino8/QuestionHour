@@ -11,7 +11,7 @@ const themeVisuals = {
   history_politics: ['🏛️', '📜', '🗳️', '⚖️', '🗺️'],
   technology_innovation: ['🤖', '💻', '📱', '🚀', '🛰️'],
   arts_culture: ['🎨', '🎭', '🎶', '📚', '🖼️'],
-  society_ethics: ['🤝', '⚖️', '🧑‍🤝‍🧑', '🏳️‍🌈', '🕊️'],
+  society_ethics: ['🤝', '⚖️', '🕊️'],
   pop_culture: ['🎬', '🎤', '🎮', '📺', '🎧'],
   sports: ['⚽', '🏀', '🏈', '🎾', '🏇', '🏸', '🥎', '🥅'],
   reflection: ['🧘', '💭', '📖', '🌅', '🪞']

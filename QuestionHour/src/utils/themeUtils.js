@@ -4,49 +4,41 @@
 export const THEMES = {
   general: {
     color: '#4CAF50',
-    icon: '❓',
     background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
     animation: 'pulse',
   },
   science_nature: {
     color: "#4CAF50",
-    icon: "🌱",
     background: "linear-gradient(135deg, #134e5e 0%, #71b280 100%)",
     animation: "shake",
   },
   history_politics: {
     color: "#F44336", 
-    icon: "🏛️",
     background: "linear-gradient(135deg, #780206 0%, #061161 100%)",
     animation: "float",
   },
   technology_innovation: {
     color: "#2196F3",
-    icon: "💻", 
     background: "linear-gradient(135deg, #0c2461 0%, #1e3799 100%)",
     animation: "pulse",
   },
   arts_culture: {
     color: "#FF9800",
-    icon: "🎭",
     background: "linear-gradient(135deg, #cc2b5e 0%, #753a88 100%)", 
     animation: "shake",
   },
   society_ethics: {
     color: "#9C27B0",
-    icon: "🤝",
     background: "linear-gradient(135deg, #6a0572 0%, #ab83a1 100%)",
     animation: "float",
   },
   sports: {
     color: "#FF5722",
-    icon: "⚽",
     background: "linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)",
     animation: "shake",
   },
   reflection: {
     color: "#9C27B0",
-    icon: "🧘",
     background: "linear-gradient(135deg, #6a0572 0%, #ab83a1 100%)",
     animation: "float",
   },
