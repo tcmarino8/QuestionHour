@@ -380,12 +380,12 @@ app.post('/api/news/generate-question', async (req, res) => {
       fetch = (await import('node-fetch')).default;
     }
 
-    const prompt = `You are a helpful assistant that drafts a single, neutral, concise public discussion question (max 140 characters) relevant to current events.\n\nTheme: ${naturalTheme}\nHeadlines:\n${headlines.map((h, i) => `- ${h.title}`).join('\n')}\n\nGuidelines:\n- Do not lead or assume facts; avoid yes/no phrasing like \"Do you support...\"\n- Avoid naming individuals unless essential\n- Be broadly applicable to a general audience\n- Output only the question text without quotes.`;
+    const prompt = `You are a helpful assistant that drafts a single, neutral, concise public discussion question (max 140 characters) relevant to current events that can be answered with agree or disagree.\n\nTheme: ${naturalTheme}\nHeadlines:\n${headlines.map((h, i) => `- ${h.title}`).join('\n')}\n\nGuidelines:\n- Do not lead or assume facts; avoid yes/no phrasing like \"Do you support...\"\n- Avoid naming individuals unless essential\n- Be broadly applicable to a general audience\n- Output only the question text without quotes.`;
 
     const body = {
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You generate one concise, neutral civic question from headlines.' },
+        { role: 'system', content: 'You generate one concise, neutral civic question from headlines answerable with "Agree or Disagree".' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.4,
@@ -475,7 +475,17 @@ async function generateQuestionFromHeadlines(headlines, naturalTheme) {
   if (!fetch) {
     fetch = (await import('node-fetch')).default;
   }
-  const prompt = `You are a helpful assistant that drafts a single, neutral, concise public discussion question (max 140 characters) relevant to current events.\n\nTheme: ${naturalTheme}\nHeadlines:\n${headlines.map(h => `- ${h.title}`).join('\n')}\n\nGuidelines:\n- Do not lead or assume facts; avoid yes/no phrasing like \"Do you support...\"\n- Avoid naming individuals unless essential\n- Be broadly applicable to a general audience\n- Output only the question text without quotes.`;
+  const prompt = `You will generate ONE concise, neutral statement (<= 140 chars) for public discussion that people can AGREE or DISAGREE with.
+    
+Theme: ${naturalTheme}
+Headlines:
+${headlines.map((h, i) => `- ${h.title}`).join('\n')}
+
+Guidelines:
+- Output a single balanced statement (not a question).
+- Do not assume unproven facts; keep it general.
+- Avoid naming individuals unless essential.
+- Output ONLY the statement, without quotes.`;
   const body = {
     model: 'gpt-4o-mini',
     messages: [
@@ -766,6 +776,26 @@ app.post('/api/admin/generate-today', async (req, res) => {
   } catch (e) {
     console.error('Manual generation failed:', e);
     res.status(500).json({ ok: false, error: e.message || 'failed' });
+  }
+});
+
+// Admin hard-delete the current question node (DETACH DELETE)
+app.delete('/api/admin/current-question', async (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  const providedSecret = req.headers['x-admin-secret'];
+  if (!adminSecret || providedSecret !== adminSecret) {
+    return res.status(403).json({ error: 'Forbidden: Invalid or missing admin secret.' });
+  }
+  try {
+    const deleteQuery = `
+      MATCH (q:Question {current: true})
+      DETACH DELETE q
+    `;
+    await runQuery(deleteQuery);
+    return res.json({ ok: true, message: 'Current question deleted' });
+  } catch (e) {
+    console.error('Error deleting current question:', e);
+    return res.status(500).json({ ok: false, error: e.message || 'failed' });
   }
 });
 
