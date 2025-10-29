@@ -189,17 +189,48 @@ app.delete('/api/responses', async (req, res) => {
 app.get('/api/questions/current', async (req, res) => {
   console.log('GET /api/questions/current - Request received');
   try {
-    const query = `
-      MATCH (q:Question {current: true})
+    // First check for a question from today
+    const todayQuery = `
+      MATCH (q:Question)
+      WHERE date(q.timestamp) = date()
       RETURN q
+      ORDER BY q.timestamp DESC
+      LIMIT 1
     `;
     
-    console.log('Executing query to find current question');
-    const result = await runQuery(query);
-    console.log('Query result:', result);
+    console.log('Checking for today\'s question');
+    let result = await runQuery(todayQuery);
     
     if (result.length === 0) {
-      console.log('No current question found');
+      // If no question from today, check for current question
+      const currentQuery = `
+        MATCH (q:Question {current: true})
+        RETURN q
+      `;
+      
+      console.log('No question from today, checking current question');
+      result = await runQuery(currentQuery);
+      
+      if (result.length === 0) {
+        // If no current question either, trigger generation of new one
+        console.log('No current question found, generating new one');
+        await setQuestionOfTheDay();
+        result = await runQuery(currentQuery);
+      }
+    } else {
+      // If found today's question, ensure it's marked as current
+      const updateQuery = `
+        MATCH (q:Question)
+        WHERE date(q.timestamp) = date()
+        SET q.current = true
+        RETURN q
+      `;
+      console.log('Found today\'s question, ensuring it\'s marked as current');
+      result = await runQuery(updateQuery);
+    }
+    
+    if (result.length === 0) {
+      console.log('Still no question found after attempts');
       return res.status(404).json({ error: 'No current question found' });
     }
     
@@ -508,9 +539,34 @@ Guidelines:
 }
 
 async function setQuestionOfTheDay() {
+  // First check if we already have a question from today
+  const todayQuery = `
+    MATCH (q:Question)
+    WHERE date(q.timestamp) = date()
+    RETURN q
+  `;
+  
+  try {
+    const existingQuestion = await runQuery(todayQuery);
+    if (existingQuestion.length > 0) {
+      console.log('Question for today already exists, using it');
+      // Make sure it's marked as current
+      const updateQuery = `
+        MATCH (q:Question)
+        WHERE date(q.timestamp) = date()
+        SET q.current = true
+        RETURN q
+      `;
+      const result = await runQuery(updateQuery);
+      return result[0].get('q').properties;
+    }
+  } catch (e) {
+    console.error('Error checking for existing question:', e);
+  }
+
   const theme = getTodayTheme();
 
-  // Always archive any existing current question
+  // Archive any existing current question
   const archiveQuery = `
       MATCH (q:Question {current: true})
       SET q.current = false,
