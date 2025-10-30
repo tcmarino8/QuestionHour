@@ -667,8 +667,8 @@ async function setQuestionOfTheDay() {
   }
 }
 
-// Run at midnight PST every day
-cron.schedule('0 0 * * *', setQuestionOfTheDay, {
+// Run at noon PST every day (12:00 PM America/Los_Angeles)
+cron.schedule('0 12 * * *', setQuestionOfTheDay, {
   timezone: 'America/Los_Angeles'
 });
 

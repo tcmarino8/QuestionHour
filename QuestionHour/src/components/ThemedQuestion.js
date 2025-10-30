@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getQuestionBoxStyles, getThemeConfig, ANIMATIONS } from '../utils/themeUtils';
 // import { api } from '../services/api';
 
@@ -63,6 +63,48 @@ const ThemedQuestion = ({ question, theme }) => {
   const [showNewsModal, setShowNewsModal] = useState(false);
   const [newsSources, setNewsSources] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
+
+  // Small retro digital clock component
+  const DigitalClock = () => {
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+      const t = setInterval(() => setNow(new Date()), 1000);
+      return () => clearInterval(t);
+    }, []);
+
+    const two = (n) => String(n).padStart(2, '0');
+    const hours = two(now.getHours());
+    const mins = two(now.getMinutes());
+    const secs = two(now.getSeconds());
+    const colonOpacity = now.getSeconds() % 2 === 0 ? 1 : 0.2;
+
+    const clockStyle = {
+      display: 'inline-block',
+      fontFamily: '"Courier New", Courier, monospace',
+      background: 'linear-gradient(180deg,#041014 0%, #00110a 100%)',
+      color: '#39ff14',
+      padding: '6px 12px',
+      borderRadius: '6px',
+      boxShadow: '0 0 14px #39ff1466, inset 0 0 6px rgba(0,0,0,0.8)',
+      fontSize: '1rem',
+      letterSpacing: '2px',
+      border: '2px solid rgba(57,255,20,0.12)'
+    };
+
+    const colonStyle = { opacity: colonOpacity, transition: 'opacity 200ms linear' };
+
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8, marginBottom: 6 }}>
+        <div style={clockStyle} aria-hidden>
+          <span>{hours}</span>
+          <span style={colonStyle}>:</span>
+          <span>{mins}</span>
+          <span style={{ opacity: 0.4, marginLeft: 6, fontSize: '0.8rem' }}>{secs}</span>
+        </div>
+      </div>
+    );
+  };
   
   const styles = getQuestionBoxStyles(theme);
   const themeConfig = getThemeConfig(theme);
@@ -112,6 +154,7 @@ const ThemedQuestion = ({ question, theme }) => {
     <>
       <style>{ANIMATIONS + emojiAnim}</style>
       <div style={styles.container}>
+        <DigitalClock />
         <span style={styles.icon}>{themeConfig.icon}</span>
         <div 
           style={styles.infoIcon}
