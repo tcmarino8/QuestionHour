@@ -108,8 +108,10 @@ app.post('/api/responses', async (req, res) => {
     // First, ensure the question exists with its properties
     const questionQuery = `
       MERGE (q:Question {text: $question})
-      SET q.current = true,
-          q.timestamp = datetime()
+      ON CREATE SET 
+        q.createdAt = datetime(),
+        // q.timestamp = datetime(),
+        q.current = false
       RETURN q
     `;
     console.log('Creating/merging question node...');
@@ -192,9 +194,9 @@ app.get('/api/questions/current', async (req, res) => {
     // First check for a question from today
     const todayQuery = `
       MATCH (q:Question)
-      WHERE date(q.timestamp) = date()
+      WHERE date(q.createdAt) = date()
       RETURN q
-      ORDER BY q.timestamp DESC
+      ORDER BY q.createdAt DESC
       LIMIT 1
     `;
     
@@ -221,8 +223,9 @@ app.get('/api/questions/current', async (req, res) => {
       // If found today's question, ensure it's marked as current
       const updateQuery = `
         MATCH (q:Question)
-        WHERE date(q.timestamp) = date()
-        SET q.current = true
+        WHERE date(q.createdAt) = date()
+        SET q.current = true,
+            q.updatedAt = datetime()
         RETURN q
       `;
       console.log('Found today\'s question, ensuring it\'s marked as current');
@@ -449,7 +452,7 @@ app.post('/api/news/generate-question', async (req, res) => {
       MERGE (q:Question {text: $text})
       SET q.current = true,
           q.theme = $theme,
-          q.timestamp = datetime(),
+          q.createdAt = datetime(),
           q.totalResponses = 0,
           q.agreeCount = 0,
           q.disagreeCount = 0,
@@ -542,7 +545,7 @@ async function setQuestionOfTheDay() {
   // First check if we already have a question from today
   const todayQuery = `
     MATCH (q:Question)
-    WHERE date(q.timestamp) = date()
+    WHERE date(q.createAt) = date()
     RETURN q
   `;
   
@@ -553,7 +556,7 @@ async function setQuestionOfTheDay() {
       // Make sure it's marked as current
       const updateQuery = `
         MATCH (q:Question)
-        WHERE date(q.timestamp) = date()
+        WHERE date(q.createdAt) = date()
         SET q.current = true
         RETURN q
       `;
@@ -570,7 +573,7 @@ async function setQuestionOfTheDay() {
   const archiveQuery = `
       MATCH (q:Question {current: true})
       SET q.current = false,
-          q.timestamp = datetime()
+          q.archivedAt = datetime()
       RETURN q
     `;
   try {
@@ -586,7 +589,7 @@ async function setQuestionOfTheDay() {
       MERGE (q:Question {text: $text})
       SET q.current = true,
           q.theme = $theme,
-          q.timestamp = datetime(),
+          q.createdAt = datetime(),
           q.totalResponses = 0,
           q.agreeCount = 0,
           q.disagreeCount = 0
@@ -612,13 +615,17 @@ async function setQuestionOfTheDay() {
         const sourcesJson = JSON.stringify(headlines.slice(0, 5));
         const createQuery = `
           MERGE (q:Question {text: $text})
-          SET q.current = true,
-              q.theme = $theme,
-              q.timestamp = datetime(),
-              q.totalResponses = 0,
-              q.agreeCount = 0,
-              q.disagreeCount = 0,
-              q.sourcesJson = $sourcesJson
+          ON CREATE SET 
+            q.createdAt = datetime(),
+            // q.timestamp = datetime(),
+            q.theme = $theme,
+            q.totalResponses = 0,
+            q.agreeCount = 0,
+            q.disagreeCount = 0
+          SET
+            q.current = true,
+            q.sourcesJson = $sourcesJson,
+            q.updatedAt = datetime()
           RETURN q
         `;
         await runQuery(createQuery, { text: questionText, theme, sourcesJson });
@@ -651,7 +658,7 @@ async function setQuestionOfTheDay() {
     MERGE (q:Question {text: $text})
     SET q.current = true,
         q.theme = $theme,
-        q.timestamp = datetime(),
+        q.createdAt = datetime(),
         q.totalResponses = 0,
         q.agreeCount = 0,
         q.disagreeCount = 0,
@@ -691,7 +698,7 @@ app.post('/api/questions/current', async (req, res) => {
     const archiveQuery = `
       MATCH (q:Question {current: true})
       SET q.current = false,
-          q.timestamp = datetime()
+          q.archivedAt = datetime()
       RETURN q
     `;
     console.log('Archiving current question');
@@ -703,12 +710,16 @@ app.post('/api/questions/current', async (req, res) => {
     // Then create or update the new current question
     const createQuery = `
       MERGE (q:Question {text: $text})
-      SET q.current = true,
-          q.theme = $theme,
-          q.timestamp = datetime(),
-          q.totalResponses = 0,
-          q.agreeCount = 0,
-          q.disagreeCount = 0
+      ON CREATE SET 
+        q.createdAt = datetime(),
+        // q.timestamp = datetime(),
+        q.totalResponses = 0,
+        q.agreeCount = 0,
+        q.disagreeCount = 0
+      SET 
+        q.current = true,
+        q.theme = $theme,
+        q.updatedAt = datetime()
       RETURN q
     `;
     
@@ -742,7 +753,7 @@ app.get('/api/questions/history', async (req, res) => {
         id: q.id,
         text: q.text,
         theme: q.theme,
-        timestamp: toString(q.timestamp),
+        createdAt: toString(q.createdAt),
         current: q.current,
         responses: [r in allResponses | {
           response: r.response,
@@ -756,7 +767,7 @@ app.get('/api/questions/history', async (req, res) => {
         disagreeCount: size(disagreeResponses),
         uniqueLocations: size(uniqueLocations)
       } as questionData
-      ORDER BY q.timestamp DESC
+      ORDER BY q.createdAt DESC
     `;
     
     console.log('Fetching question history with responses from Neo4j');
