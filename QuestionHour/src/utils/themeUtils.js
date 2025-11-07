@@ -15,7 +15,7 @@ export const THEMES = {
   history_politics: {
     color: "#F44336", 
     background: "linear-gradient(135deg, #780206 0%, #061161 100%)",
-    animation: "float",
+    animation: "pulse",
   },
   technology_innovation: {
     color: "#2196F3",
@@ -30,7 +30,7 @@ export const THEMES = {
   society_ethics: {
     color: "#9C27B0",
     background: "linear-gradient(135deg, #6a0572 0%, #ab83a1 100%)",
-    animation: "float",
+    animation: "pulse",
   },
   sports: {
     color: "#FF5722",
@@ -40,7 +40,7 @@ export const THEMES = {
   reflection: {
     color: "#9C27B0",
     background: "linear-gradient(135deg, #6a0572 0%, #ab83a1 100%)",
-    animation: "float",
+    animation: "pulse",
   },
 };
 
