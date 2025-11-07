@@ -96,8 +96,8 @@ function HistoryView({ onClose }) {
       try {
         const history = await api.getQuestionHistory();
         const sortedQuestions = history.sort((a, b) => {
-          const dateA = new Date(a.timestamp);
-          const dateB = new Date(b.timestamp);
+          const dateA = new Date(a.createdAt);
+          const dateB = new Date(b.createdAt);
           return dateB - dateA;
         });
         
@@ -225,7 +225,7 @@ function HistoryView({ onClose }) {
         >
           <option value="">Select a question</option>
           {questions.map((question, index) => {
-            const date = new Date(question.timestamp);
+            const date = new Date(question.createdAt);
             return (
               <option key={index} value={question.text}>
                 {date instanceof Date && !isNaN(date) 
