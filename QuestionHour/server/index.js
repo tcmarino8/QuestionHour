@@ -191,13 +191,14 @@ app.delete('/api/responses', async (req, res) => {
 app.get('/api/questions/current', async (req, res) => {
   console.log('GET /api/questions/current - Request received');
   try {
-    // First check for a question from today
+    // First check for a valid question from today
     const todayQuery = `
       MATCH (q:Question)
-      WHERE date(q.createdAt) = date()
-      RETURN q
+      WHERE date(q.createdAt) = date() AND q.text IS NOT NULL
+      WITH q
       ORDER BY q.createdAt DESC
       LIMIT 1
+      RETURN q
     `;
     
     console.log('Checking for today\'s question');
@@ -207,17 +208,33 @@ app.get('/api/questions/current', async (req, res) => {
       // If no question from today, check for current question
       const currentQuery = `
         MATCH (q:Question {current: true})
+        WHERE q.text IS NOT NULL
         RETURN q
       `;
       
       console.log('No question from today, checking current question');
       result = await runQuery(currentQuery);
       
+      // Only generate a new question if we don't have a valid one and it's after noon PST
       if (result.length === 0) {
-        // If no current question either, trigger generation of new one
-        console.log('No current question found, generating new one');
-        await setQuestionOfTheDay();
-        result = await runQuery(currentQuery);
+        const laNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+        const isPastNoon = laNow.getHours() >= 12;
+        
+        if (isPastNoon) {
+          console.log('No current question found and past noon PST, generating new one');
+          await setQuestionOfTheDay();
+          result = await runQuery(currentQuery);
+        } else {
+          console.log('No current question found but before noon PST, using yesterday\'s question');
+          const yesterdayQuery = `
+            MATCH (q:Question)
+            WHERE date(q.createdAt) = date() - duration('P1D') AND q.text IS NOT NULL
+            RETURN q
+            ORDER BY q.createdAt DESC
+            LIMIT 1
+          `;
+          result = await runQuery(yesterdayQuery);
+        }
       }
     } else {
       // If found today's question, ensure it's marked as current
@@ -545,8 +562,10 @@ async function setQuestionOfTheDay() {
   // First check if we already have a question from today
   const todayQuery = `
     MATCH (q:Question)
-    WHERE date(q.createAt) = date()
+    WHERE date(q.createdAt) = date() AND q.text IS NOT NULL
     RETURN q
+    ORDER BY q.createdAt DESC
+    LIMIT 1
   `;
   
   try {
