@@ -190,6 +190,7 @@ app.delete('/api/responses', async (req, res) => {
 // Get current question
 app.get('/api/questions/current', async (req, res) => {
   console.log('GET /api/questions/current - Request received');
+  console.log("Req.body ", req.body)
   try {
     // First check for a valid question from today
     const todayQuery = `
@@ -237,16 +238,18 @@ app.get('/api/questions/current', async (req, res) => {
         }
       }
     } else {
-      // If found today's question, ensure it's marked as current
+      // If found today's question, ensure it's marked as current and has the correct theme
+      const todayTheme = getTodayTheme();
       const updateQuery = `
         MATCH (q:Question)
         WHERE date(q.createdAt) = date()
         SET q.current = true,
+            q.theme = $theme,
             q.updatedAt = datetime()
         RETURN q
       `;
-      console.log('Found today\'s question, ensuring it\'s marked as current');
-      result = await runQuery(updateQuery);
+      console.log('Found today\'s question, ensuring it\'s marked as current with theme:', todayTheme);
+      result = await runQuery(updateQuery, { theme: todayTheme });
     }
     
     if (result.length === 0) {
@@ -297,6 +300,7 @@ function themeIdToNatural(themeId) {
 app.get('/api/themes/today', (req, res) => {
   try {
     const id = getTodayTheme();
+    console.log(id)
     const natural = themeIdToNatural(id);
     res.json({ id, natural });
   } catch (e) {
@@ -322,7 +326,8 @@ app.get('/api/news/headlines', async (req, res) => {
     queryParts.unshift('latest');
 
     const searchQuery = encodeURIComponent(queryParts.join(' '));
-    const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en`;
+    // tbs=qdr:w filters results to the past week (qdr = query date range, w = week)
+    const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en&tbs=qdr:w`;
 
     if (!fetch) {
       fetch = (await import('node-fetch')).default;
@@ -358,7 +363,7 @@ app.get('/api/news/headlines', async (req, res) => {
 
       headlines.push({ title, source, link });
       seenTitles.add(title);
-      if (headlines.length >= 5) break;
+      if (headlines.length >= 10) break;
     }
 
     return res.json({ themeId, naturalTheme, count: headlines.length, headlines });
@@ -383,7 +388,8 @@ app.post('/api/news/generate-question', async (req, res) => {
       const queryParts = ['latest', naturalTheme];
       if (location && String(location).trim().length > 0) queryParts.push(`in ${String(location).trim()}`);
       const searchQuery = encodeURIComponent(queryParts.join(' '));
-      const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en`;
+      // tbs=qdr:w filters results to the past week (qdr = query date range, w = week)
+      const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en&tbs=qdr:w`;
 
       if (!fetch) {
         fetch = (await import('node-fetch')).default;
@@ -431,7 +437,18 @@ app.post('/api/news/generate-question', async (req, res) => {
       fetch = (await import('node-fetch')).default;
     }
 
-    const prompt = `You are a helpful assistant that drafts a single, neutral, concise public discussion question (max 140 characters) relevant to current events that can be answered with agree or disagree.\n\nTheme: ${naturalTheme}\nHeadlines:\n${headlines.map((h, i) => `- ${h.title}`).join('\n')}\n\nGuidelines:\n- Do not lead or assume facts; avoid yes/no phrasing like \"Do you support...\"\n- Avoid naming individuals unless essential\n- Be broadly applicable to a general audience\n- Output only the question text without quotes.`;
+    const prompt = `You are a helpful assistant that drafts a single, neutral, concise public discussion question (max 140 characters) relevant to current events that can be answered with agree or disagree. 
+    The question should be based on the \n\nTheme: ${naturalTheme}\n and come from the Headlines:\n${headlines.map((h, i) => `- ${h.title}`).join('\n')}
+    \n\n Guidelines:
+    \n- out of the headlines, focus the question on the more unique headlines
+    \n- make them actionable, example: "Ethical standards in media and technology are crucial for maintaining public trust in society." should instead be
+    "Developing Ethical standards in media and technology are crucial for maintaining public trust in society."
+
+    \n- Do not lead or assume facts; avoid yes/no phrasing like \"Do you support...\"
+    \n- Avoid naming individuals unless essential
+    \n- Be broadly applicable to a general audience
+    \n- Output only the question text without quotes.
+    \n- Make it specific enough so that each week will generate a unique question`;
 
     const body = {
       model: 'gpt-4o-mini',
@@ -490,7 +507,8 @@ async function fetchHeadlinesForTheme(naturalTheme, location) {
   const parts = ['latest', naturalTheme];
   if (location && String(location).trim().length > 0) parts.push(`in ${String(location).trim()}`);
   const searchQuery = encodeURIComponent(parts.join(' '));
-  const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en`;
+  // tbs=qdr:w filters results to the past week (qdr = query date range, w = week)
+  const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en&tbs=qdr:w`;
 
   if (!fetch) {
     fetch = (await import('node-fetch')).default;
@@ -568,25 +586,27 @@ async function setQuestionOfTheDay() {
     LIMIT 1
   `;
   
+  const theme = getTodayTheme();
+  
   try {
     const existingQuestion = await runQuery(todayQuery);
     if (existingQuestion.length > 0) {
       console.log('Question for today already exists, using it');
-      // Make sure it's marked as current
+      // Make sure it's marked as current and has the correct theme
       const updateQuery = `
         MATCH (q:Question)
         WHERE date(q.createdAt) = date()
-        SET q.current = true
+        SET q.current = true,
+            q.theme = $theme,
+            q.updatedAt = datetime()
         RETURN q
       `;
-      const result = await runQuery(updateQuery);
+      const result = await runQuery(updateQuery, { theme });
       return result[0].get('q').properties;
     }
   } catch (e) {
     console.error('Error checking for existing question:', e);
   }
-
-  const theme = getTodayTheme();
 
   // Archive any existing current question
   const archiveQuery = `
@@ -693,8 +713,8 @@ async function setQuestionOfTheDay() {
   }
 }
 
-// Run at noon PST every day (12:00 PM America/Los_Angeles)
-cron.schedule('0 12 * * *', setQuestionOfTheDay, {
+// Run at midnight PST every day (00:00 PM America/Los_Angeles)
+cron.schedule('0 0 * * *', setQuestionOfTheDay, {
   timezone: 'America/Los_Angeles'
 });
 

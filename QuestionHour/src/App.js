@@ -226,7 +226,7 @@ function App() {
         try {
           const { latitude, longitude } = position.coords;
           const zipCode = await getZipFromCoordinates(latitude, longitude);
-          
+         
           if (!zipCode) {
             setError("Could not determine ZIP code from your location");
             setIsLoading(false);
@@ -234,8 +234,8 @@ function App() {
           }
 
           setUserLocation({
-            lat: latitude,
-            lng: longitude,
+            lat: latitude + (Math.random() - 0.5) * 0.01,
+            lng: longitude + (Math.random() - 0.5) * 0.01,
             zip: zipCode
           });
           setSuccessMessage('Location found! You can now vote.');
