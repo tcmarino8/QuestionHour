@@ -299,6 +299,33 @@ function themeIdToNatural(themeId) {
   return themeId.replace(/_/g, ' ');
 }
 
+function resolveThemeId(themeInput) {
+  if (!themeInput || typeof themeInput !== 'string') return getTodayTheme();
+
+  const normalized = themeInput.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (themes.includes(normalized)) return normalized;
+
+  const aliasToTheme = {
+    science: 'science_nature',
+    nature: 'science_nature',
+    science_and_nature: 'science_nature',
+    politics: 'history_politics',
+    history: 'history_politics',
+    history_and_politics: 'history_politics',
+    technology: 'technology_innovation',
+    innovation: 'technology_innovation',
+    technology_and_innovation: 'technology_innovation',
+    arts: 'arts_culture',
+    culture: 'arts_culture',
+    arts_and_culture: 'arts_culture',
+    society: 'society_ethics',
+    ethics: 'society_ethics',
+    society_and_ethics: 'society_ethics'
+  };
+
+  return aliasToTheme[normalized] || getTodayTheme();
+}
+
 // Testable endpoint: returns today's theme id and natural-language text
 app.get('/api/themes/today', (req, res) => {
   try {
@@ -339,8 +366,8 @@ app.get('/api/news/headlines', async (req, res) => {
     const themeParam = req.query.theme; // natural language optional override
     const location = req.query.location; // optional, e.g., "United States" or city/state
 
-    const themeId = getTodayTheme();
-    const naturalTheme = themeParam && themeParam.trim().length > 0 ? themeParam : themeIdToNatural(themeId);
+    const themeId = resolveThemeId(themeParam);
+    const naturalTheme = themeIdToNatural(themeId);
     const headlines = await fetchHeadlinesForTheme(naturalTheme, location, MAX_HEADLINES_FOR_QUESTION);
 
     return res.json({ themeId, naturalTheme, count: headlines.length, headlines });
@@ -354,8 +381,8 @@ app.get('/api/news/headlines', async (req, res) => {
 app.post('/api/news/generate-question', async (req, res) => {
   try {
     const { headlines: providedHeadlines, theme, location } = req.body || {};
-    const themeId = getTodayTheme();
-    const naturalTheme = theme && theme.trim().length > 0 ? theme : themeIdToNatural(themeId);
+    const themeId = resolveThemeId(theme);
+    const naturalTheme = themeIdToNatural(themeId);
 
     // Get headlines if not provided
     let headlines = normalizeProvidedHeadlines(providedHeadlines);
@@ -534,8 +561,8 @@ async function fetchHeadlinesForTheme(naturalTheme, location, limit = MAX_HEADLI
     try {
       const questionsPath = path.join(__dirname, 'questions.json');
       const pool = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
-      const themeId = themes.includes(naturalTheme) ? naturalTheme : getTodayTheme();
-      const themedPool = pool.filter((q) => q && q.theme === themeId && q.text);
+      const fallbackThemeId = resolveThemeId(naturalTheme);
+      const themedPool = pool.filter((q) => q && q.theme === fallbackThemeId && q.text);
       const sourcePool = themedPool.length > 0 ? themedPool : pool.filter((q) => q && q.text);
 
       for (const item of sourcePool) {

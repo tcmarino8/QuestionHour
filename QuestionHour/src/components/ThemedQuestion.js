@@ -64,6 +64,10 @@ const ThemedQuestion = ({ question, theme }) => {
   const [newsSources, setNewsSources] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
 
+  useEffect(() => {
+    setNewsSources([]);
+  }, [question, theme]);
+
   // Small retro digital clock component
   const DigitalClock = () => {
     const [now, setNow] = useState(new Date());
@@ -123,7 +127,9 @@ const ThemedQuestion = ({ question, theme }) => {
           ? 'https://question-hour.vercel.app'  
           : 'http://localhost:3001';
         
-        const response = await fetch(`${API_BASE_URL}/api/news/headlines`);
+        const params = new URLSearchParams();
+        if (theme) params.set('theme', theme);
+        const response = await fetch(`${API_BASE_URL}/api/news/headlines?${params.toString()}`);
         console.log('📡 Response status:', response.status);
         console.log('📡 Response URL:', response.url);
         
