@@ -14,6 +14,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const MAX_HEADLINES_FOR_QUESTION = 15;
+const MAX_HEADLINE_PARSE_LIMIT = 30;
+
 
 // Neo4j connection
 let driver;
@@ -309,7 +312,28 @@ app.get('/api/themes/today', (req, res) => {
   }
 });
 
-// Fetch 5 recent Google News headlines for a theme (server-side)
+function normalizeProvidedHeadlines(input, limit = MAX_HEADLINES_FOR_QUESTION) {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((item) => {
+      if (typeof item === 'string') {
+        return { title: item.trim() };
+      }
+      if (!item || typeof item !== 'object') return null;
+      const title = typeof item.title === 'string' ? item.title.trim() : '';
+      if (!title) return null;
+      return {
+        title,
+        source: typeof item.source === 'string' ? item.source.trim() : '',
+        link: typeof item.link === 'string' ? item.link.trim() : ''
+      };
+    })
+    .filter((item) => item && item.title)
+    .slice(0, limit);
+}
+
+// Fetch recent Google News headlines for a theme (server-side)
 app.get('/api/news/headlines', async (req, res) => {
   try {
     const themeParam = req.query.theme; // natural language optional override
@@ -317,54 +341,7 @@ app.get('/api/news/headlines', async (req, res) => {
 
     const themeId = getTodayTheme();
     const naturalTheme = themeParam && themeParam.trim().length > 0 ? themeParam : themeIdToNatural(themeId);
-
-    const queryParts = [naturalTheme];
-    if (location && location.trim().length > 0) {
-      queryParts.push(`in ${location.trim()}`);
-    }
-    // Favor fresh coverage
-    queryParts.unshift('latest');
-
-    const searchQuery = encodeURIComponent(queryParts.join(' '));
-    // tbs=qdr:w filters results to the past week (qdr = query date range, w = week)
-    const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en&tbs=qdr:w`;
-
-    if (!fetch) {
-      fetch = (await import('node-fetch')).default;
-    }
-    const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
-    if (!resp.ok) {
-      return res.status(502).json({ error: 'Failed to fetch Google News', status: resp.status });
-    }
-    const html = await resp.text();
-
-    // Very light-weight parsing from the HTML. Google markup can change, so keep defensive.
-    // Strategy: split by <article and extract title via aria-label="More - ...", link via first href, source via data-n-tid="9">...
-    const items = html.split('<article').slice(1);
-    const headlines = [];
-    const seenTitles = new Set();
-
-    for (const raw of items) {
-      const item = '<article' + raw; // restore tag for regex context
-      const titleMatch = item.match(/aria-label="More\s-\s(.*?)"/);
-      const sourceMatch = item.match(/data-n-tid="9">(.*?)<\/div>/);
-      const hrefMatch = item.match(/href="(.*?)"/);
-
-      const title = titleMatch ? titleMatch[1] : null;
-      if (!title || seenTitles.has(title)) continue;
-
-      let link = hrefMatch ? hrefMatch[1] : null;
-      if (!link) continue;
-      if (link.startsWith('.')) {
-        link = 'https://news.google.com' + link.substring(1);
-      }
-
-      const source = sourceMatch ? sourceMatch[1] : '';
-
-      headlines.push({ title, source, link });
-      seenTitles.add(title);
-      if (headlines.length >= 10) break;
-    }
+    const headlines = await fetchHeadlinesForTheme(naturalTheme, location, MAX_HEADLINES_FOR_QUESTION);
 
     return res.json({ themeId, naturalTheme, count: headlines.length, headlines });
   } catch (e) {
@@ -373,49 +350,17 @@ app.get('/api/news/headlines', async (req, res) => {
   }
 });
 
-// Generate a neutral, concise question from up to 5 headlines using an LLM
+// Generate a neutral, concise question from up to 15 headlines using an LLM
 app.post('/api/news/generate-question', async (req, res) => {
   try {
     const { headlines: providedHeadlines, theme, location } = req.body || {};
+    const themeId = getTodayTheme();
+    const naturalTheme = theme && theme.trim().length > 0 ? theme : themeIdToNatural(themeId);
 
     // Get headlines if not provided
-    let headlines = Array.isArray(providedHeadlines) ? providedHeadlines.slice(0, 5) : null;
+    let headlines = normalizeProvidedHeadlines(providedHeadlines);
     if (!headlines || headlines.length === 0) {
-      // Reuse local endpoint logic by calling the function directly
-      const themeId = getTodayTheme();
-      const naturalTheme = theme && theme.trim().length > 0 ? theme : themeIdToNatural(themeId);
-
-      const queryParts = ['latest', naturalTheme];
-      if (location && String(location).trim().length > 0) queryParts.push(`in ${String(location).trim()}`);
-      const searchQuery = encodeURIComponent(queryParts.join(' '));
-      // tbs=qdr:w filters results to the past week (qdr = query date range, w = week)
-      const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en&tbs=qdr:w`;
-
-      if (!fetch) {
-        fetch = (await import('node-fetch')).default;
-      }
-      const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
-      if (!resp.ok) {
-        return res.status(502).json({ error: 'Failed to fetch Google News', status: resp.status });
-      }
-      const html = await resp.text();
-      const items = html.split('<article').slice(1);
-      const parsed = [];
-      const seen = new Set();
-      for (const raw of items) {
-        const item = '<article' + raw;
-        const titleMatch = item.match(/aria-label="More\s-\s(.*?)"/);
-        const hrefMatch = item.match(/href="(.*?)"/);
-        const title = titleMatch ? titleMatch[1] : null;
-        if (!title || seen.has(title)) continue;
-        let link = hrefMatch ? hrefMatch[1] : null;
-        if (!link) continue;
-        if (link.startsWith('.')) link = 'https://news.google.com' + link.substring(1);
-        parsed.push({ title, link });
-        seen.add(title);
-        if (parsed.length >= 5) break;
-      }
-      headlines = parsed;
+      headlines = await fetchHeadlinesForTheme(naturalTheme, location, MAX_HEADLINES_FOR_QUESTION);
     }
 
     if (!headlines || headlines.length === 0) {
@@ -423,8 +368,6 @@ app.post('/api/news/generate-question', async (req, res) => {
     }
 
     const apiKey = process.env.OPENAI_API_KEY;
-    const themeId = getTodayTheme();
-    // const naturalTheme = theme && theme.trim().length > 0 ? theme : themeIdToNatural(themeId);
 
     // Fallback if no API key: create a simple neutral question template
     if (!apiKey) {
@@ -481,7 +424,15 @@ app.post('/api/news/generate-question', async (req, res) => {
       return res.status(502).json({ error: 'No question generated' });
     }
 
-    const sourcesJson = JSON.stringify(headlines.slice(0, 5));
+    const archiveQuery = `
+      MATCH (q:Question {current: true})
+      SET q.current = false,
+          q.archivedAt = datetime()
+      RETURN q
+    `;
+    await runQuery(archiveQuery);
+
+    const sourcesJson = JSON.stringify(headlines.slice(0, MAX_HEADLINES_FOR_QUESTION));
     const createQuery = `
       MERGE (q:Question {text: $text})
       SET q.current = true,
@@ -493,7 +444,7 @@ app.post('/api/news/generate-question', async (req, res) => {
           q.sourcesJson = $sourcesJson
       RETURN q
     `;
-    await runQuery(createQuery, { text: question, theme, sourcesJson });
+    await runQuery(createQuery, { text: question, theme: themeId, sourcesJson });
 
     return res.json({ themeId, naturalTheme, question, headlines });
   } catch (e) {
@@ -503,36 +454,109 @@ app.post('/api/news/generate-question', async (req, res) => {
 });
 
 // Helpers used by scheduler
-async function fetchHeadlinesForTheme(naturalTheme, location) {
+async function fetchHeadlinesForTheme(naturalTheme, location, limit = MAX_HEADLINES_FOR_QUESTION) {
   const parts = ['latest', naturalTheme];
   if (location && String(location).trim().length > 0) parts.push(`in ${String(location).trim()}`);
   const searchQuery = encodeURIComponent(parts.join(' '));
   // tbs=qdr:w filters results to the past week (qdr = query date range, w = week)
   const url = `https://news.google.com/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en&tbs=qdr:w`;
+  const rssUrl = `https://news.google.com/rss/search?q=${searchQuery}&hl=en-US&gl=US&ceid=US:en`;
+
+  const decodeHtml = (text) => {
+    if (!text || typeof text !== 'string') return '';
+    return text
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .trim();
+  };
 
   if (!fetch) {
     fetch = (await import('node-fetch')).default;
   }
-  const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
-  if (!resp.ok) throw new Error(`Failed to fetch Google News: ${resp.status}`);
-  const html = await resp.text();
-  const items = html.split('<article').slice(1);
   const headlines = [];
   const seen = new Set();
-  for (const raw of items) {
-    const item = '<article' + raw;
-    const titleMatch = item.match(/aria-label="More\s-\s(.*?)"/);
-    const hrefMatch = item.match(/href="(.*?)"/);
-    const title = titleMatch ? titleMatch[1] : null;
-    if (!title || seen.has(title)) continue;
-    let link = hrefMatch ? hrefMatch[1] : null;
-    if (!link) continue;
-    if (link.startsWith('.')) link = 'https://news.google.com' + link.substring(1);
-    headlines.push({ title, link });
-    seen.add(title);
-    if (headlines.length >= 5) break;
+
+  // Primary path: RSS is more stable than Google News HTML for server-side parsing.
+  const rssResp = await fetch(rssUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }});
+  if (rssResp.ok) {
+    const rss = await rssResp.text();
+    const rssItems = rss.split('<item>').slice(1);
+
+    for (const raw of rssItems) {
+      const item = raw.split('</item>')[0] || raw;
+      const titleMatch = item.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const sourceMatch = item.match(/<source[^>]*>([\s\S]*?)<\/source>/);
+
+      const title = titleMatch ? decodeHtml(titleMatch[1]) : '';
+      if (!title || seen.has(title)) continue;
+
+      const link = linkMatch ? decodeHtml(linkMatch[1]) : '';
+      if (!link) continue;
+
+      const source = sourceMatch ? decodeHtml(sourceMatch[1]) : '';
+      headlines.push({ title, source, link });
+      seen.add(title);
+
+      if (headlines.length >= Math.min(limit, MAX_HEADLINE_PARSE_LIMIT)) break;
+    }
   }
-  return headlines;
+
+  // Fallback path: if RSS parsing yields nothing, try HTML scraping.
+  if (headlines.length === 0) {
+    const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
+    if (resp.ok) {
+      const html = await resp.text();
+      const items = html.split('<article').slice(1);
+      for (const raw of items) {
+        const item = '<article' + raw;
+        const titleMatch = item.match(/aria-label="More\s-\s(.*?)"/);
+        const sourceMatch = item.match(/data-n-tid="9">(.*?)<\/div>/);
+        const hrefMatch = item.match(/href="(.*?)"/);
+        const title = titleMatch ? decodeHtml(titleMatch[1]) : '';
+        if (!title || seen.has(title)) continue;
+        let link = hrefMatch ? decodeHtml(hrefMatch[1]) : '';
+        if (!link) continue;
+        if (link.startsWith('.')) link = 'https://news.google.com' + link.substring(1);
+        const source = sourceMatch ? decodeHtml(sourceMatch[1]) : '';
+        headlines.push({ title, source, link });
+        seen.add(title);
+        if (headlines.length >= Math.min(limit, MAX_HEADLINE_PARSE_LIMIT)) break;
+      }
+    }
+  }
+
+  // Final fallback: keep question generation functional even when external news sources fail.
+  if (headlines.length === 0) {
+    try {
+      const questionsPath = path.join(__dirname, 'questions.json');
+      const pool = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
+      const themeId = themes.includes(naturalTheme) ? naturalTheme : getTodayTheme();
+      const themedPool = pool.filter((q) => q && q.theme === themeId && q.text);
+      const sourcePool = themedPool.length > 0 ? themedPool : pool.filter((q) => q && q.text);
+
+      for (const item of sourcePool) {
+        const title = String(item.text).trim();
+        if (!title || seen.has(title)) continue;
+
+        headlines.push({
+          title,
+          source: 'questionhour-local-fallback',
+          link: ''
+        });
+        seen.add(title);
+
+        if (headlines.length >= limit) break;
+      }
+    } catch (fallbackError) {
+      console.error('Local fallback headline generation failed:', fallbackError);
+    }
+  }
+
+  return headlines.slice(0, limit);
 }
 
 async function generateQuestionFromHeadlines(headlines, naturalTheme) {
@@ -651,7 +675,7 @@ async function setQuestionOfTheDay() {
     if (headlines && headlines.length > 0) {
       const questionText = await generateQuestionFromHeadlines(headlines, naturalTheme);
       if (questionText && questionText.length > 0) {
-        const sourcesJson = JSON.stringify(headlines.slice(0, 5));
+        const sourcesJson = JSON.stringify(headlines.slice(0, MAX_HEADLINES_FOR_QUESTION));
         const createQuery = `
           MERGE (q:Question {text: $text})
           ON CREATE SET 
@@ -691,7 +715,7 @@ async function setQuestionOfTheDay() {
   } catch (e) {
     console.warn('Could not fetch fallback headlines:', e.message || e);
   }
-  const sourcesJson = JSON.stringify((headlines || []).slice(0, 5));
+  const sourcesJson = JSON.stringify((headlines || []).slice(0, MAX_HEADLINES_FOR_QUESTION));
 
   const createQuery = `
     MERGE (q:Question {text: $text})
@@ -860,8 +884,30 @@ app.get('/api/questions/:text/stats', async (req, res) => {
 });
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+app.get('/api/health', async (req, res) => {
+  let neo4jReady = false;
+  try {
+    await runQuery('RETURN 1 as ok');
+    neo4jReady = true;
+  } catch (e) {
+    neo4jReady = false;
+  }
+
+  const openAiConfigured = Boolean(process.env.OPENAI_API_KEY);
+  const adminSecretConfigured = Boolean(process.env.ADMIN_SECRET);
+  const status = neo4jReady ? 'ok' : 'degraded';
+
+  res.status(neo4jReady ? 200 : 503).json({
+    status,
+    dependencies: {
+      neo4j: neo4jReady ? 'up' : 'down',
+      openai: openAiConfigured ? 'configured' : 'missing_key',
+      adminSecret: adminSecretConfigured ? 'configured' : 'missing'
+    },
+    headlines: {
+      targetCount: MAX_HEADLINES_FOR_QUESTION
+    }
+  });
 });
 
 // Catch-all route - MUST BE LAST
