@@ -995,6 +995,72 @@ app.delete('/api/admin/current-question', async (req, res) => {
   }
 });
 
+// One-time admin endpoint: backfill missing aiGenerated flags on historical questions
+app.post('/api/admin/backfill-ai-generated', async (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  const providedSecret = req.headers['x-admin-secret'];
+  if (!adminSecret || providedSecret !== adminSecret) {
+    return res.status(403).json({ error: 'Forbidden: Invalid or missing admin secret.' });
+  }
+
+  try {
+    const taskName = 'backfill_ai_generated_v1';
+
+    const alreadyRanQuery = `
+      MATCH (t:AdminTask {name: $taskName})
+      RETURN t.completedAt AS completedAt, t.updatedCount AS updatedCount
+      LIMIT 1
+    `;
+    const alreadyRanResult = await runQuery(alreadyRanQuery, { taskName });
+
+    if (alreadyRanResult.length > 0) {
+      const completedAt = alreadyRanResult[0].get('completedAt');
+      const updatedCountRaw = alreadyRanResult[0].get('updatedCount');
+      const updatedCount = typeof updatedCountRaw?.toNumber === 'function'
+        ? updatedCountRaw.toNumber()
+        : Number(updatedCountRaw || 0);
+
+      return res.status(409).json({
+        ok: false,
+        message: 'This one-time backfill has already been run.',
+        taskName,
+        completedAt,
+        updatedCount
+      });
+    }
+
+    const updateQuery = `
+      MATCH (q:Question)
+      WHERE q.aiGenerated IS NULL
+      SET q.aiGenerated = false
+      RETURN count(q) AS updatedCount
+    `;
+    const updateResult = await runQuery(updateQuery);
+    const updatedCountRaw = updateResult[0]?.get('updatedCount');
+    const updatedCount = typeof updatedCountRaw?.toNumber === 'function'
+      ? updatedCountRaw.toNumber()
+      : Number(updatedCountRaw || 0);
+
+    const markCompleteQuery = `
+      MERGE (t:AdminTask {name: $taskName})
+      SET t.completedAt = datetime(),
+          t.updatedCount = $updatedCount
+      RETURN t
+    `;
+    await runQuery(markCompleteQuery, { taskName, updatedCount });
+
+    return res.json({
+      ok: true,
+      message: 'aiGenerated backfill completed successfully.',
+      taskName,
+      updatedCount
+    });
+  } catch (e) {
+    console.error('Error running aiGenerated backfill:', e);
+    return res.status(500).json({ ok: false, error: e.message || 'failed' });
+  }
+});
+
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
