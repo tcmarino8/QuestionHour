@@ -59,7 +59,7 @@ const emojiAnim = `
 .theme-visuals span:nth-child(5) { animation-delay: 0.8s; }
 `;
 
-const ThemedQuestion = ({ question, theme }) => {
+const ThemedQuestion = ({ question, theme, aiGenerated = false }) => {
   const [showNewsModal, setShowNewsModal] = useState(false);
   const [newsSources, setNewsSources] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
@@ -215,6 +215,17 @@ const ThemedQuestion = ({ question, theme }) => {
             <h2 style={{ marginTop: 0, color: themeConfig.color }}>
               News Related to Today's Question
             </h2>
+            <div style={{
+              marginBottom: '12px',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              backgroundColor: aiGenerated ? '#e6f4ea' : '#f1f3f4',
+              color: aiGenerated ? '#137333' : '#444',
+              fontSize: '0.9rem',
+              fontWeight: 600
+            }}>
+              {aiGenerated ? 'This question was generated with AI.' : 'This question was not generated with AI.'}
+            </div>
             {loadingNews ? (
               <p>Loading news sources...</p>
             ) : newsSources.length > 0 ? (

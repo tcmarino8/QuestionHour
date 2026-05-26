@@ -114,7 +114,8 @@ app.post('/api/responses', async (req, res) => {
       ON CREATE SET 
         q.createdAt = datetime(),
         // q.timestamp = datetime(),
-        q.current = false
+        q.current = false,
+        q.aiGenerated = false
       RETURN q
     `;
     console.log('Creating/merging question node...');
@@ -248,6 +249,7 @@ app.get('/api/questions/current', async (req, res) => {
         WHERE date(q.createdAt) = date()
         SET q.current = true,
             q.theme = $theme,
+            q.aiGenerated = coalesce(q.aiGenerated, false),
             q.updatedAt = datetime()
         RETURN q
       `;
@@ -400,7 +402,7 @@ app.post('/api/news/generate-question', async (req, res) => {
     if (!apiKey) {
       const firstTitle = headlines[0].title || 'today\'s news';
       const fallback = `Given recent headlines about ${naturalTheme}, including \"${firstTitle}\", do you think this topic deserves more public attention right now?`;
-      return res.json({ themeId, naturalTheme, question: fallback, headlines });
+      return res.json({ themeId, naturalTheme, question: fallback, aiGenerated: false, headlines });
     }
 
     if (!fetch) {
@@ -464,6 +466,7 @@ app.post('/api/news/generate-question', async (req, res) => {
       MERGE (q:Question {text: $text})
       SET q.current = true,
           q.theme = $theme,
+          q.aiGenerated = true,
           q.createdAt = datetime(),
           q.totalResponses = 0,
           q.agreeCount = 0,
@@ -473,7 +476,7 @@ app.post('/api/news/generate-question', async (req, res) => {
     `;
     await runQuery(createQuery, { text: question, theme: themeId, sourcesJson });
 
-    return res.json({ themeId, naturalTheme, question, headlines });
+    return res.json({ themeId, naturalTheme, question, aiGenerated: true, headlines });
   } catch (e) {
     console.error('Error generating question:', e);
     return res.status(500).json({ error: 'Failed to generate question' });
@@ -590,7 +593,10 @@ async function generateQuestionFromHeadlines(headlines, naturalTheme) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     const firstTitle = headlines[0]?.title || 'today\'s news';
-    return `Given recent headlines about ${naturalTheme}, including \"${firstTitle}\", what aspect deserves more public attention right now?`;
+    return {
+      text: `Given recent headlines about ${naturalTheme}, including \"${firstTitle}\", what aspect deserves more public attention right now?`,
+      aiGenerated: false
+    };
   }
   if (!fetch) {
     fetch = (await import('node-fetch')).default;
@@ -624,7 +630,10 @@ Guidelines:
   const data = await resp.json();
   const question = data?.choices?.[0]?.message?.content?.trim();
   if (!question) throw new Error('No question text');
-  return question;
+  return {
+    text: question,
+    aiGenerated: true
+  };
 }
 
 async function setQuestionOfTheDay() {
@@ -649,6 +658,7 @@ async function setQuestionOfTheDay() {
         WHERE date(q.createdAt) = date()
         SET q.current = true,
             q.theme = $theme,
+            q.aiGenerated = coalesce(q.aiGenerated, false),
             q.updatedAt = datetime()
         RETURN q
       `;
@@ -679,6 +689,7 @@ async function setQuestionOfTheDay() {
       MERGE (q:Question {text: $text})
       SET q.current = true,
           q.theme = $theme,
+          q.aiGenerated = false,
           q.createdAt = datetime(),
           q.totalResponses = 0,
           q.agreeCount = 0,
@@ -700,7 +711,9 @@ async function setQuestionOfTheDay() {
   try {
     const headlines = await fetchHeadlinesForTheme(naturalTheme);
     if (headlines && headlines.length > 0) {
-      const questionText = await generateQuestionFromHeadlines(headlines, naturalTheme);
+      const generatedQuestion = await generateQuestionFromHeadlines(headlines, naturalTheme);
+      const questionText = generatedQuestion?.text || '';
+      const aiGenerated = Boolean(generatedQuestion?.aiGenerated);
       if (questionText && questionText.length > 0) {
         const sourcesJson = JSON.stringify(headlines.slice(0, MAX_HEADLINES_FOR_QUESTION));
         const createQuery = `
@@ -709,16 +722,18 @@ async function setQuestionOfTheDay() {
             q.createdAt = datetime(),
             // q.timestamp = datetime(),
             q.theme = $theme,
+            q.aiGenerated = $aiGenerated,
             q.totalResponses = 0,
             q.agreeCount = 0,
             q.disagreeCount = 0
           SET
             q.current = true,
+            q.aiGenerated = $aiGenerated,
             q.sourcesJson = $sourcesJson,
             q.updatedAt = datetime()
           RETURN q
         `;
-        await runQuery(createQuery, { text: questionText, theme, sourcesJson });
+        await runQuery(createQuery, { text: questionText, theme, sourcesJson, aiGenerated });
         return { text: questionText, theme };
       }
     }
@@ -748,6 +763,7 @@ async function setQuestionOfTheDay() {
     MERGE (q:Question {text: $text})
     SET q.current = true,
         q.theme = $theme,
+        q.aiGenerated = false,
         q.createdAt = datetime(),
         q.totalResponses = 0,
         q.agreeCount = 0,
@@ -778,7 +794,7 @@ app.post('/api/questions/current', async (req, res) => {
   console.log('Request body:', req.body);
   
   try {
-    const { text, theme } = req.body;
+    const { text, theme, aiGenerated } = req.body;
     
     if (!text) {
       return res.status(400).json({ error: 'Question text is required' });
@@ -809,12 +825,13 @@ app.post('/api/questions/current', async (req, res) => {
       SET 
         q.current = true,
         q.theme = $theme,
+        q.aiGenerated = $aiGenerated,
         q.updatedAt = datetime()
       RETURN q
     `;
     
     console.log('Creating/updating new current question');
-    const result = await runQuery(createQuery, { text, theme });
+    const result = await runQuery(createQuery, { text, theme, aiGenerated: Boolean(aiGenerated) });
     console.log('Query result:', result);
     
     const questionData = result[0].get('q').properties;

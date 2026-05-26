@@ -104,7 +104,7 @@ class ErrorBoundary extends React.Component {
 
 function App() {
   console.log('App component rendering');
-  const [currentQuestion, setCurrentQuestion] = useState({ text: '', theme: 'general' });
+  const [currentQuestion, setCurrentQuestion] = useState({ text: '', theme: 'general', aiGenerated: false });
   const [graphData, setGraphData] = useState({
     nodes: [
       { 
@@ -390,6 +390,7 @@ function App() {
       <ThemedQuestion 
         question={currentQuestion.text} 
         theme={currentQuestion.theme || 'general'} 
+        aiGenerated={Boolean(currentQuestion.aiGenerated)}
       />
 
       {/* Stats Panel Toggle Button */}
