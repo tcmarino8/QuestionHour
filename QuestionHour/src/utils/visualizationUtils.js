@@ -2,6 +2,8 @@
 
 // Utility functions for visualization
 
+export const LAVENDER_COLOR = '#B57EDC';
+
 // Function to add random jitter to coordinates
 export const addCoordinateJitter = (coord, maxJitter = 0.01) => {
   const jitter = (Math.random() - 0.5) * maxJitter;
@@ -9,6 +11,8 @@ export const addCoordinateJitter = (coord, maxJitter = 0.01) => {
 }; 
 
 export const createGraphData = (question, responses) => {
+  const isReflectionTheme = (question?.theme || '').toLowerCase() === 'reflection';
+
   // Create question node with unique positioning
   const questionNode = { 
     id: `question-${question.text}`, 
@@ -31,10 +35,12 @@ export const createGraphData = (question, responses) => {
   let maxDisagreeZip = { zip: '', percentDisagree: 0 };
   let agreeCount = 0;
   let disagreeCount = 0;
+  let reflectedCount = 0;
 
-  // Separate responses into agree and disagree
+  // Separate responses by type
   const agreeResponses = responses.filter(r => r.response === 'agree');
   const disagreeResponses = responses.filter(r => r.response === 'disagree');
+  const reflectedResponses = responses.filter(r => r.response === 'reflected');
 
   // Constants for radius calculation
   const BASE_RADIUS = 50;  // Minimum distance from question
@@ -47,6 +53,7 @@ export const createGraphData = (question, responses) => {
       zipStats[response.location] = {
         agree: 0,
         disagree: 0,
+        reflected: 0,
         lat: response.lat,
         lng: response.lng,
         total: 0
@@ -54,8 +61,10 @@ export const createGraphData = (question, responses) => {
     }
     if (response.response === 'agree') {
       zipStats[response.location].agree++;
-    } else {
+    } else if (response.response === 'disagree') {
       zipStats[response.location].disagree++;
+    } else if (response.response === 'reflected') {
+      zipStats[response.location].reflected++;
     }
     zipStats[response.location].total++;
   };
@@ -78,7 +87,7 @@ export const createGraphData = (question, responses) => {
     nodes.push({
       id: nodeId,
       name: `ZIP: ${response.location}`,
-      color: 'green',
+      color: isReflectionTheme ? LAVENDER_COLOR : 'green',
       x,
       y,
       z,
@@ -91,7 +100,7 @@ export const createGraphData = (question, responses) => {
     links.push({
       source: questionNode.id,
       target: nodeId,
-      color: 'green',
+      color: isReflectionTheme ? LAVENDER_COLOR : 'green',
       width: 4,
       type: 'response'
     });
@@ -118,7 +127,7 @@ export const createGraphData = (question, responses) => {
     nodes.push({
       id: nodeId,
       name: `ZIP: ${response.location}`,
-      color: 'red',
+      color: isReflectionTheme ? LAVENDER_COLOR : 'red',
       x,
       y,
       z,
@@ -131,12 +140,49 @@ export const createGraphData = (question, responses) => {
     links.push({
       source: questionNode.id,
       target: nodeId,
-      color: 'red',
+      color: isReflectionTheme ? LAVENDER_COLOR : 'red',
       width: 4,
       type: 'response'
     });
 
     // Update ZIP stats
+    updateZipStats(response, zipStats);
+  });
+
+  // Process reflected responses around full circle
+  reflectedResponses.forEach((response, index) => {
+    reflectedCount++;
+    const nodeId = `response-${question.text}-reflected-${index}`;
+    const angle = (index / Math.max(reflectedResponses.length, 1)) * Math.PI * 2;
+    const radius = Math.min(
+      BASE_RADIUS + (index * RADIUS_INCREMENT),
+      MAX_RADIUS
+    );
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    const z = (Math.random() - 0.5) * 50;
+
+    nodes.push({
+      id: nodeId,
+      name: `ZIP: ${response.location}`,
+      color: LAVENDER_COLOR,
+      x,
+      y,
+      z,
+      type: 'response',
+      response: 'reflected',
+      timestamp: response.timestamp,
+      radius: radius
+    });
+
+    links.push({
+      source: questionNode.id,
+      target: nodeId,
+      color: LAVENDER_COLOR,
+      width: 4,
+      type: 'response'
+    });
+
     updateZipStats(response, zipStats);
   });
 
@@ -149,10 +195,10 @@ export const createGraphData = (question, responses) => {
     }
 
     // Most divided, most agree, most disagree
-    const total = stats.agree + stats.disagree;
-    if (total > 0) {
-      const percentAgree = stats.agree / total;
-      const percentDisagree = stats.disagree / total;
+    const totalPolarized = stats.agree + stats.disagree;
+    if (totalPolarized > 0) {
+      const percentAgree = stats.agree / totalPolarized;
+      const percentDisagree = stats.disagree / totalPolarized;
       const diff = Math.abs(percentAgree - 0.5);
 
       if (diff < mostDividedZip.diff) {
@@ -171,10 +217,11 @@ export const createGraphData = (question, responses) => {
       id: `zip-${zip}`,
       lat: addCoordinateJitter(stats.lat),
       lng: addCoordinateJitter(stats.lng),
-      color: stats.agree >= stats.disagree ? 'green' : 'red',
+      color: isReflectionTheme ? LAVENDER_COLOR : (stats.agree >= stats.disagree ? 'green' : 'red'),
       stats: {
         agree: stats.agree,
         disagree: stats.disagree,
+        reflected: stats.reflected,
         total: stats.total
       }
     });
@@ -187,50 +234,11 @@ export const createGraphData = (question, responses) => {
       totalResponses: responses.length,
       agreeCount,
       disagreeCount,
+      reflectedCount,
       mostActiveZip,
       mostDividedZip,
       maxAgreeZip,
       maxDisagreeZip
     }
   };
-
-//   // Update most active ZIP
-//   Object.entries(zipStats).forEach(([zip, stats]) => {
-//     if (stats.total > mostActiveZip.count) {
-//       mostActiveZip = {
-//         zip,
-//         count: stats.total
-//       };
-//     }
-//   });
-
-//   // Create map points with statistics
-//   Object.entries(zipStats).forEach(([zip, stats]) => {
-//     points.push({
-//       id: `zip-${zip}`,
-//       lat: addCoordinateJitter(stats.lat),
-//       lng: addCoordinateJitter(stats.lng),
-//       color: stats.agree >= stats.disagree ? 'green' : 'red',
-//       stats: {
-//         agree: stats.agree,
-//         disagree: stats.disagree,
-//         total: stats.total
-//       }
-//     });
-//   });
-
-//   return {
-//     graphData: { nodes, links },
-//     mapPoints: points,
-//     stats: {
-//       totalResponses: responses.length,
-//       agreeCount,
-//       disagreeCount,
-//       mostActiveZip
-//     }
-//   };
-// };
-
-
-
 };

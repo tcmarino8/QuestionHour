@@ -106,7 +106,16 @@ app.get('/api/questions/current/responses', async (req, res) => {
 // Add a new response
 app.post('/api/responses', async (req, res) => {
   try {
+    validateResponseBody(req.body);
     const { question, response, timestamp, location, lat, lng } = req.body;
+    const allowedResponses = ['agree', 'disagree', 'reflected'];
+
+    if (!allowedResponses.includes(response)) {
+      return res.status(400).json({
+        error: 'Failed to add response',
+        details: `Response must be one of: ${allowedResponses.join(', ')}`
+      });
+    }
     
     // First, ensure the question exists with its properties
     const questionQuery = `
@@ -471,6 +480,7 @@ app.post('/api/news/generate-question', async (req, res) => {
           q.totalResponses = 0,
           q.agreeCount = 0,
           q.disagreeCount = 0,
+          q.reflectedCount = 0,
           q.sourcesJson = $sourcesJson
       RETURN q
     `;
@@ -693,7 +703,8 @@ async function setQuestionOfTheDay() {
           q.createdAt = datetime(),
           q.totalResponses = 0,
           q.agreeCount = 0,
-          q.disagreeCount = 0
+          q.disagreeCount = 0,
+          q.reflectedCount = 0
       RETURN q
     `;
     try {
@@ -725,7 +736,8 @@ async function setQuestionOfTheDay() {
             q.aiGenerated = $aiGenerated,
             q.totalResponses = 0,
             q.agreeCount = 0,
-            q.disagreeCount = 0
+            q.disagreeCount = 0,
+            q.reflectedCount = 0
           SET
             q.current = true,
             q.aiGenerated = $aiGenerated,
@@ -768,6 +780,7 @@ async function setQuestionOfTheDay() {
         q.totalResponses = 0,
         q.agreeCount = 0,
         q.disagreeCount = 0,
+        q.reflectedCount = 0,
         q.sourcesJson = $sourcesJson
     RETURN q
   `;
@@ -821,7 +834,8 @@ app.post('/api/questions/current', async (req, res) => {
         // q.timestamp = datetime(),
         q.totalResponses = 0,
         q.agreeCount = 0,
-        q.disagreeCount = 0
+        q.disagreeCount = 0,
+        q.reflectedCount = 0
       SET 
         q.current = true,
         q.theme = $theme,
@@ -855,6 +869,7 @@ app.get('/api/questions/history', async (req, res) => {
       WITH q, collect(r) as allResponses,
            [r in collect(r) WHERE r.response = 'agree'] as agreeResponses,
            [r in collect(r) WHERE r.response = 'disagree'] as disagreeResponses,
+         [r in collect(r) WHERE r.response = 'reflected'] as reflectedResponses,
            collect(DISTINCT r.location) as uniqueLocations
       RETURN {
         id: q.id,
@@ -872,6 +887,7 @@ app.get('/api/questions/history', async (req, res) => {
         totalResponses: size(allResponses),
         agreeCount: size(agreeResponses),
         disagreeCount: size(disagreeResponses),
+        reflectedCount: size(reflectedResponses),
         uniqueLocations: size(uniqueLocations)
       } as questionData
       ORDER BY q.createdAt DESC
@@ -902,12 +918,14 @@ app.get('/api/questions/:text/stats', async (req, res) => {
            count(r) as totalResponses,
            size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'agree'}) | r]) as agreeCount,
            size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'disagree'}) | r]) as disagreeCount,
+           size([(q)-[:HAS_RESPONSE]->(r:Response {response: 'reflected'}) | r]) as reflectedCount,
            collect(DISTINCT r.location) as locations
       RETURN q {
         .*,
         totalResponses: totalResponses,
         agreeCount: agreeCount,
         disagreeCount: disagreeCount,
+        reflectedCount: reflectedCount,
         uniqueLocations: size(locations),
         locations: locations
       }

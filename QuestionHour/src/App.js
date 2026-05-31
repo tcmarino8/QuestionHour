@@ -8,7 +8,7 @@ import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
 import { api } from './services/api';
 import HistoryView from './components/HistoryView';
-import { createGraphData } from './utils/visualizationUtils';
+import { createGraphData, LAVENDER_COLOR } from './utils/visualizationUtils';
 
 // Map style configurations
 // Get Stadia API key from environment variable
@@ -104,6 +104,7 @@ class ErrorBoundary extends React.Component {
 
 function App() {
   console.log('App component rendering');
+  const REFLECTED_TYPE = 'reflected';
   const [currentQuestion, setCurrentQuestion] = useState({ text: '', theme: 'general', aiGenerated: false });
   const [graphData, setGraphData] = useState({
     nodes: [
@@ -130,6 +131,7 @@ function App() {
     totalResponses: 0,
     agreeCount: 0,
     disagreeCount: 0,
+    reflectedCount: 0,
     mostActiveZip: { zip: '', count: 0 },
     mostDividedZip: { zip: '', percentAgree: 0, percentDisagree: 0, diff: 1 },
     maxAgreeZip : { zip: '', percentAgree: 0 },
@@ -147,6 +149,7 @@ function App() {
   const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_toner');
   const isMobile = viewportWidth <= 900;
   const isSmallMobile = viewportWidth <= 480;
+  const isReflectionTheme = (currentQuestion.theme || '').toLowerCase() === 'reflection';
 
   useEffect(() => {
     const handleResize = () => {
@@ -481,8 +484,12 @@ function App() {
               paddingLeft: '20px'
             }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.agreeCount}</div>
-                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Agree</div>
+                <div style={{ color: isReflectionTheme ? LAVENDER_COLOR : '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>
+                  {isReflectionTheme ? responseStats.reflectedCount : responseStats.agreeCount}
+                </div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>
+                  {isReflectionTheme ? 'Reflected' : 'Agree'}
+                </div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ color: '#f44336', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.disagreeCount}</div>
@@ -505,7 +512,7 @@ function App() {
               <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.8rem' }}>{responseStats.mostActiveZip.count} responses</div>
               </div>
                 )}
-          {responseStats.mostDividedZip.zip && (
+          {!isReflectionTheme && responseStats.mostDividedZip.zip && (
             <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Divided ZIP</div>
               <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostDividedZip.zip}</div>
@@ -514,7 +521,7 @@ function App() {
               </div>
             </div>
           )}
-          {responseStats.maxAgreeZip.zip && (
+          {!isReflectionTheme && responseStats.maxAgreeZip.zip && (
             <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Agree ZIP</div>
               <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxAgreeZip.zip}</div>
@@ -523,7 +530,7 @@ function App() {
               </div>
             </div>
           )}
-          {responseStats.maxDisagreeZip.zip && (
+          {!isReflectionTheme && responseStats.maxDisagreeZip.zip && (
             <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Disagree ZIP</div>
               <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxDisagreeZip.zip}</div>
@@ -587,26 +594,49 @@ function App() {
         >
           {isLoading ? 'Getting Location...' : 'Get My Location'}
         </button>
-        <button 
-          onClick={() => addVote("agree")} 
-          style={{ 
-            ...getVoteButtonStyles(currentQuestion.theme || 'general', 'agree'),
-            opacity: !userLocation ? 0.5 : 1,
-          }}
-          disabled={!userLocation}
-        >
-          Agree
-        </button>
-        <button 
-          onClick={() => addVote("disagree")} 
-          style={{ 
-            ...getVoteButtonStyles(currentQuestion.theme || 'general', 'disagree'),
-            opacity: !userLocation ? 0.5 : 1,
-          }}
-          disabled={!userLocation}
-        >
-          Disagree
-        </button>
+        {isReflectionTheme ? (
+          <button
+            onClick={() => addVote(REFLECTED_TYPE)}
+            style={{
+              backgroundColor: LAVENDER_COLOR,
+              padding: isSmallMobile ? '8px 12px' : '12px 20px',
+              borderRadius: '25px',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              opacity: !userLocation ? 0.5 : 1,
+              boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+              fontWeight: 'bold',
+              fontSize: isSmallMobile ? '0.85rem' : '1rem'
+            }}
+            disabled={!userLocation}
+          >
+            A gentle reflection!
+          </button>
+        ) : (
+          <>
+            <button 
+              onClick={() => addVote("agree")} 
+              style={{ 
+                ...getVoteButtonStyles(currentQuestion.theme || 'general', 'agree'),
+                opacity: !userLocation ? 0.5 : 1,
+              }}
+              disabled={!userLocation}
+            >
+              Agree
+            </button>
+            <button 
+              onClick={() => addVote("disagree")} 
+              style={{ 
+                ...getVoteButtonStyles(currentQuestion.theme || 'general', 'disagree'),
+                opacity: !userLocation ? 0.5 : 1,
+              }}
+              disabled={!userLocation}
+            >
+              Disagree
+            </button>
+          </>
+        )}
         <button 
           onClick={resetZoom} 
           style={{ 
@@ -760,13 +790,23 @@ function App() {
                 <Popup>
                   <div style={{
                     padding: '10px',
-                    textAlign: 'center'
+                    textAlign: 'center',
+                    backgroundColor: isReflectionTheme ? 'rgba(181, 126, 220, 0.14)' : 'transparent',
+                    borderRadius: '8px'
                   }}>
-                    <h3 style={{ margin: '0 0 10px 0' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
-                      <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
-                    </div>
+                    <h3 style={{ margin: '0 0 10px 0', color: isReflectionTheme ? LAVENDER_COLOR : '#111' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
+                    {isReflectionTheme ? (
+                      <div>
+                        <span style={{ color: LAVENDER_COLOR, fontWeight: 'bold' }}>
+                          Reflected: {point.stats.reflected || 0}
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
+                        <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
+                      </div>
+                    )}
                     <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
                   </div>
                 </Popup>

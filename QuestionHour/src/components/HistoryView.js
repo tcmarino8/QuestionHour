@@ -3,7 +3,7 @@ import { api } from '../services/api';
 import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { createGraphData } from '../utils/visualizationUtils';
+import { createGraphData, LAVENDER_COLOR } from '../utils/visualizationUtils';
 import {MAP_STYLES, THEME_TO_MAP_STYLE} from '../App';
 
 function HistoryView({ onClose }) {
@@ -19,6 +19,7 @@ function HistoryView({ onClose }) {
     totalResponses: 0,
     agreeCount: 0,
     disagreeCount: 0,
+    reflectedCount: 0,
     mostActiveZip: { zip: '', count: 0 },
     mostDividedZip: { zip: '', percentAgree: 0, percentDisagree: 0, diff: 1 },
     maxAgreeZip : { zip: '', percentAgree: 0 },
@@ -34,6 +35,7 @@ function HistoryView({ onClose }) {
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const isMobile = viewportWidth <= 900;
   const isSmallMobile = viewportWidth <= 480;
+  const isReflectionTheme = (selectedQuestion?.theme || '').toLowerCase() === 'reflection';
 
   useEffect(() => {
     const handleResize = () => setViewportWidth(window.innerWidth);
@@ -339,8 +341,12 @@ function HistoryView({ onClose }) {
               paddingLeft: '20px'
             }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.agreeCount}</div>
-                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Agree</div>
+                <div style={{ color: isReflectionTheme ? LAVENDER_COLOR : '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>
+                  {isReflectionTheme ? responseStats.reflectedCount : responseStats.agreeCount}
+                </div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>
+                  {isReflectionTheme ? 'Reflected' : 'Agree'}
+                </div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ color: '#f44336', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.disagreeCount}</div>
@@ -362,7 +368,7 @@ function HistoryView({ onClose }) {
               <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.8rem' }}>{responseStats.mostActiveZip.count} responses</div>
             </div>
           )}
-           {responseStats.mostDividedZip.zip && (
+           {!isReflectionTheme && responseStats.mostDividedZip.zip && (
             <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Divided ZIP</div>
               <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostDividedZip.zip}</div>
@@ -371,7 +377,7 @@ function HistoryView({ onClose }) {
               </div>
             </div>
           )}
-          {responseStats.maxAgreeZip.zip && (
+          {!isReflectionTheme && responseStats.maxAgreeZip.zip && (
             <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Agree ZIP</div>
               <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxAgreeZip.zip}</div>
@@ -380,7 +386,7 @@ function HistoryView({ onClose }) {
               </div>
             </div>
           )}
-          {responseStats.maxDisagreeZip.zip && (
+          {!isReflectionTheme && responseStats.maxDisagreeZip.zip && (
             <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Disagree ZIP</div>
               <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxDisagreeZip.zip}</div>
@@ -509,13 +515,23 @@ function HistoryView({ onClose }) {
                   <Popup>
                     <div style={{
                       padding: '10px',
-                      textAlign: 'center'
+                      textAlign: 'center',
+                      backgroundColor: isReflectionTheme ? 'rgba(181, 126, 220, 0.14)' : 'transparent',
+                      borderRadius: '8px'
                     }}>
-                      <h3 style={{ margin: '0 0 10px 0' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
-                        <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
-                      </div>
+                      <h3 style={{ margin: '0 0 10px 0', color: isReflectionTheme ? LAVENDER_COLOR : '#111' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
+                      {isReflectionTheme ? (
+                        <div>
+                          <span style={{ color: LAVENDER_COLOR, fontWeight: 'bold' }}>
+                            Reflected: {point.stats.reflected || 0}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
+                          <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
+                        </div>
+                      )}
                       <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
                     </div>
                   </Popup>
