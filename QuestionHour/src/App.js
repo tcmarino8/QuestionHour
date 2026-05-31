@@ -2,7 +2,6 @@ import './App.css';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
-import ThemedQuestion from './components/ThemedQuestion';
 import { getVoteButtonStyles } from './utils/themeUtils';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
@@ -62,6 +61,17 @@ export const THEME_TO_MAP_STYLE = {
   arts_culture: 'stamen_watercolor',
   sports: 'alidade_smooth_dark',
   reflection: 'stamen_toner'
+};
+
+const THEME_VISUALS = {
+  science_nature: ['🧬', '🌱', '🔬', '🌎', '🌻'],
+  history_politics: ['🏛️', '📜', '🗳️', '⚖️', '🗺️'],
+  technology_innovation: ['🤖', '💻', '📱', '🚀', '🛰️'],
+  arts_culture: ['🎨', '🎭', '🎶', '📚', '🖼️'],
+  society_ethics: ['🤝', '⚖️', '🕊️'],
+  sports: ['⚽', '🏀', '🏈', '🎾', '🏇'],
+  reflection: ['🧘', '💭', '📖', '🌅', '🪞'],
+  general: ['✨', '💡', '🌐', '🧠']
 };
 
 // Fix for default marker icons in react-leaflet
@@ -146,17 +156,35 @@ function App() {
   const [showStatsPanel, setShowStatsPanel] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [graphSize, setGraphSize] = useState({ width: 800, height: 500 });
+  const [voteState, setVoteState] = useState({ hasVoted: false, response: null });
   // Add new state for selected map style
   const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_toner');
   const isMobile = viewportWidth <= 900;
   const isSmallMobile = viewportWidth <= 480;
   const isReflectionTheme = (currentQuestion.theme || '').toLowerCase() === 'reflection';
+  const currentThemeId = (currentQuestion.theme || 'general').toLowerCase();
   const metadataDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
     day: 'numeric'
   });
-  const dayThemeLabel = `${metadataDate} · ${(currentQuestion.theme || 'general').replace(/_/g, ' ')}`;
+  const dayThemeLabel = `${metadataDate} · ${currentThemeId.replace(/_/g, ' ')}`;
+  const voteStorageKey = `qhour-vote-${currentQuestion.text || 'unknown'}`;
+  const currentVisuals = THEME_VISUALS[currentThemeId] || THEME_VISUALS.general;
+
+  useEffect(() => {
+    if (!currentQuestion.text) return;
+    try {
+      const saved = localStorage.getItem(voteStorageKey);
+      if (saved) {
+        setVoteState(JSON.parse(saved));
+      } else {
+        setVoteState({ hasVoted: false, response: null });
+      }
+    } catch {
+      setVoteState({ hasVoted: false, response: null });
+    }
+  }, [voteStorageKey, currentQuestion.text]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -358,7 +386,7 @@ function App() {
       setTimeout(() => mapRef.current.invalidateSize(), 120);
     }
 
-    if (index === 0 && networkContainerRef.current) {
+    if (index === 2 && networkContainerRef.current) {
       setTimeout(() => {
         setGraphSize({
           width: Math.max(280, Math.floor(networkContainerRef.current.offsetWidth)),
@@ -393,6 +421,15 @@ function App() {
       });
 
       await updateVisualization();
+
+      const nextVoteState = { hasVoted: true, response: sentiment };
+      setVoteState(nextVoteState);
+      try {
+        localStorage.setItem(voteStorageKey, JSON.stringify(nextVoteState));
+      } catch {
+        // Ignore storage failures and keep in-memory state.
+      }
+
       setSuccessMessage('Vote recorded!');
       setTimeout(() => setSuccessMessage(''), 3000);
       setTimeout(() => resetZoom(), 500);
@@ -433,12 +470,6 @@ function App() {
           </svg>
         </button>
       </div>
-
-      <ThemedQuestion 
-        question={currentQuestion.text} 
-        theme={currentQuestion.theme || 'general'} 
-        aiGenerated={Boolean(currentQuestion.aiGenerated)}
-      />
 
       {/* Stats Panel Toggle Button */}
       <div style={{
@@ -589,113 +620,6 @@ function App() {
           </button>
       </div>
 
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: '10px',
-        margin: isMobile ? '12px 8px' : '20px 0',
-        flexWrap: 'wrap',
-        position: 'relative',
-        zIndex: 900
-      }}>
-        <button 
-          onClick={getLocation}
-          style={{ 
-            backgroundColor: "#007bff",
-            padding: isSmallMobile ? '8px 12px' : '10px 20px',
-            borderRadius: '5px',
-            border: 'none',
-            color: 'white',
-            cursor: 'pointer',
-            opacity: isLoading ? 0.7 : 1,
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-            fontSize: isSmallMobile ? '0.85rem' : '1rem'
-          }}
-          disabled={isLoading}
-        >
-          {isLoading ? 'Getting Location...' : 'Get My Location'}
-        </button>
-        {isReflectionTheme ? (
-          <button
-            onClick={() => addVote(REFLECTED_TYPE)}
-            style={{
-              backgroundColor: LAVENDER_COLOR,
-              padding: isSmallMobile ? '8px 12px' : '12px 20px',
-              borderRadius: '25px',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              opacity: !userLocation ? 0.5 : 1,
-              boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
-              fontWeight: 'bold',
-              fontSize: isSmallMobile ? '0.85rem' : '1rem'
-            }}
-            disabled={!userLocation}
-          >
-            A gentle reflection!
-          </button>
-        ) : (
-          <>
-            <button 
-              onClick={() => addVote("agree")} 
-              style={{ 
-                ...getVoteButtonStyles(currentQuestion.theme || 'general', 'agree'),
-                opacity: !userLocation ? 0.5 : 1,
-              }}
-              disabled={!userLocation}
-            >
-              Agree
-            </button>
-            <button 
-              onClick={() => addVote("disagree")} 
-              style={{ 
-                ...getVoteButtonStyles(currentQuestion.theme || 'general', 'disagree'),
-                opacity: !userLocation ? 0.5 : 1,
-              }}
-              disabled={!userLocation}
-            >
-              Disagree
-            </button>
-          </>
-        )}
-        <button 
-          onClick={resetZoom} 
-          style={{ 
-            backgroundColor: 'black',
-            padding: isSmallMobile ? '8px 12px' : '10px 20px',
-            borderRadius: '5px',
-            border: '1px solid #ccc',
-            cursor: 'pointer',
-            color: 'white',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-            fontSize: isSmallMobile ? '0.85rem' : '1rem'
-          }}
-        >
-          Reset View
-        </button>
-
-        <button 
-          onClick={() => setShowInfoPopup(true)}
-          style={{ 
-            padding: isSmallMobile ? '8px 12px' : '10px 20px',
-            borderRadius: '5px',
-            border: '1px solid #ccc',
-            cursor: 'pointer',
-            backgroundColor: 'black',
-            color: 'white',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-            fontSize: isSmallMobile ? '0.85rem' : '1rem'
-          }}
-        >
-          Why do you need my location?
-        </button>
-      </div>
-      
-      {error && <p className="error" style={{ color: 'red', textAlign: 'center' }}>{error}</p>}
-      {successMessage && <p className="success" style={{ color: 'green', textAlign: 'center' }}>{successMessage}</p>}
-      {isLoading && <p style={{ textAlign: 'center' }}>Getting your location...</p>}
-
       {showInfoPopup && (
         <div style={{
           position: 'fixed',
@@ -731,29 +655,101 @@ function App() {
       <div className="live-day-meta">{dayThemeLabel}</div>
       <div className="visualization-container card-deck-container">
         <CardDeckSlider
-          labels={['Network View', 'Map View']}
+          labels={['Question & Vote', 'Map View', 'Network View']}
           initialIndex={0}
+          loop={true}
           onActiveIndexChange={handleLiveCardChange}
         >
-          <div className="network-visualization" ref={networkContainerRef}>
-            <ForceGraph3D
-              ref={fgRef}
-              graphData={graphData}
-              nodeAutoColorBy="color"
-              nodeLabel="name"
-              linkColor='color'
-              linkWidth={4}
-              linkDirectionalParticles={2}
-              linkDirectionalParticleWidth={2}
-              onNodeClick={handleNodeClick}
-              enableNodeDrag={true}
-              enableNavigationControls={true}
-              enablePointerInteraction={true}
-              width={graphSize.width}
-              height={graphSize.height}
-              cooldownTicks={100}
-              onEngineStop={() => fgRef.current?.zoomToFit(400)}
-            />
+          <div className="question-vote-card">
+            <div className="question-vote-chip">Question Of The Day</div>
+            <div className="question-vote-text">{currentQuestion.text || 'Loading question...'}</div>
+
+            <div className="question-float-row">
+              {currentVisuals.map((icon, index) => (
+                <span key={`${icon}-${index}`} className="question-float-token" style={{ animationDelay: `${index * 0.15}s` }}>
+                  {icon}
+                </span>
+              ))}
+            </div>
+
+            {!voteState.hasVoted ? (
+              <>
+                <div className="question-vote-actions">
+                  <button
+                    onClick={getLocation}
+                    className="question-vote-btn location"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Getting Location...' : 'Get My Location'}
+                  </button>
+
+                  {isReflectionTheme ? (
+                    <button
+                      onClick={() => addVote(REFLECTED_TYPE)}
+                      className="question-vote-btn reflected"
+                      disabled={!userLocation}
+                    >
+                      A gentle reflection!
+                    </button>
+                  ) : (
+                    <div className="question-vote-split">
+                      <button
+                        onClick={() => addVote('agree')}
+                        style={{
+                          ...getVoteButtonStyles(currentQuestion.theme || 'general', 'agree'),
+                          opacity: !userLocation ? 0.5 : 1
+                        }}
+                        disabled={!userLocation}
+                      >
+                        Agree
+                      </button>
+                      <button
+                        onClick={() => addVote('disagree')}
+                        style={{
+                          ...getVoteButtonStyles(currentQuestion.theme || 'general', 'disagree'),
+                          opacity: !userLocation ? 0.5 : 1
+                        }}
+                        disabled={!userLocation}
+                      >
+                        Disagree
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setShowInfoPopup(true)}
+                    className="question-vote-btn info"
+                  >
+                    Why do you need my location?
+                  </button>
+                </div>
+
+                {error && <p className="error" style={{ marginTop: '8px' }}>{error}</p>}
+                {successMessage && <p className="success" style={{ marginTop: '8px' }}>{successMessage}</p>}
+              </>
+            ) : (
+              <div className="question-analysis-grid">
+                <div className="analysis-box agree">
+                  <span>Agree</span>
+                  <strong>{responseStats.agreeCount}</strong>
+                </div>
+                <div className="analysis-box disagree">
+                  <span>Disagree</span>
+                  <strong>{responseStats.disagreeCount}</strong>
+                </div>
+                <div className="analysis-box reflected">
+                  <span>Reflected</span>
+                  <strong>{responseStats.reflectedCount || 0}</strong>
+                </div>
+                <div className="analysis-box total">
+                  <span>Total</span>
+                  <strong>{responseStats.totalResponses}</strong>
+                </div>
+                <div className="analysis-user-response">
+                  Your response today: <b>{voteState.response}</b>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="map-visualization">
@@ -816,6 +812,27 @@ function App() {
                 </CircleMarker>
               ))}
             </MapContainer>
+          </div>
+
+          <div className="network-visualization" ref={networkContainerRef}>
+            <ForceGraph3D
+              ref={fgRef}
+              graphData={graphData}
+              nodeAutoColorBy="color"
+              nodeLabel="name"
+              linkColor='color'
+              linkWidth={4}
+              linkDirectionalParticles={2}
+              linkDirectionalParticleWidth={2}
+              onNodeClick={handleNodeClick}
+              enableNodeDrag={true}
+              enableNavigationControls={true}
+              enablePointerInteraction={true}
+              width={graphSize.width}
+              height={graphSize.height}
+              cooldownTicks={100}
+              onEngineStop={() => fgRef.current?.zoomToFit(400)}
+            />
           </div>
         </CardDeckSlider>
       </div>

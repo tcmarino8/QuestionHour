@@ -8,12 +8,14 @@ import './CardDeckSlider.css';
 export default function CardDeckSlider({
   labels = ['Card 1', 'Card 2'],
   initialIndex = 0,
+  loop = false,
   onActiveIndexChange,
   children
 }) {
   const slides = useMemo(() => React.Children.toArray(children), [children]);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [swiperInstance, setSwiperInstance] = useState(null);
+  const shouldLoop = loop && slides.length > 1;
 
   const goToSlide = (index) => {
     if (swiperInstance) {
@@ -49,6 +51,8 @@ export default function CardDeckSlider({
         noSwipingClass="swiper-no-swiping"
         keyboard={{ enabled: true }}
         pagination={{ clickable: true }}
+        loop={shouldLoop}
+        centeredSlides={true}
         slidesPerView={1.06}
         spaceBetween={14}
         speed={360}

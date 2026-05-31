@@ -51,7 +51,7 @@ function HistoryView({ onClose }) {
     : '';
 
   const handleHistoryCardChange = useCallback((index) => {
-    if (index === 0 && historyMapRef.current) {
+    if (index === 1 && historyMapRef.current) {
       setTimeout(() => historyMapRef.current.invalidateSize(), 120);
     }
   }, []);
@@ -501,10 +501,69 @@ function HistoryView({ onClose }) {
           <div className="history-day-meta">{historyMetaLabel}</div>
           <div className="card-deck-container" style={{ height: 'calc(100% - 34px)' }}>
             <CardDeckSlider
-              labels={['Map View', 'Network View']}
+              labels={['Question & Responses', 'Map View', 'Network View']}
               initialIndex={0}
+              loop={true}
               onActiveIndexChange={handleHistoryCardChange}
             >
+              <div style={{
+                height: '100%',
+                background: 'linear-gradient(145deg, #0f1a2c, #111015)',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                color: 'white',
+                padding: isMobile ? '14px' : '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: isMobile ? '12px' : '16px'
+              }}>
+                <h2 style={{ margin: 0, fontSize: isMobile ? '1.1rem' : '1.35rem' }}>Question Snapshot</h2>
+                <div style={{
+                  background: 'rgba(255,255,255,0.07)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '10px',
+                  padding: isMobile ? '12px' : '16px',
+                  fontSize: isMobile ? '1rem' : '1.15rem',
+                  lineHeight: 1.5,
+                  textAlign: 'left'
+                }}>
+                  {selectedQuestion?.text}
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isSmallMobile ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+                  gap: '10px'
+                }}>
+                  <div style={{ background: 'rgba(76,175,80,0.15)', border: '1px solid rgba(76,175,80,0.35)', borderRadius: '10px', padding: '10px' }}>
+                    <div style={{ color: '#a6e3ac', fontSize: '0.85rem' }}>Agree</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{responseStats.agreeCount}</div>
+                  </div>
+                  <div style={{ background: 'rgba(244,67,54,0.15)', border: '1px solid rgba(244,67,54,0.35)', borderRadius: '10px', padding: '10px' }}>
+                    <div style={{ color: '#ffb2ac', fontSize: '0.85rem' }}>Disagree</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{responseStats.disagreeCount}</div>
+                  </div>
+                  <div style={{ background: 'rgba(181,126,220,0.15)', border: '1px solid rgba(181,126,220,0.4)', borderRadius: '10px', padding: '10px' }}>
+                    <div style={{ color: '#dec5f0', fontSize: '0.85rem' }}>Reflected</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{responseStats.reflectedCount || 0}</div>
+                  </div>
+                </div>
+
+                <div style={{
+                  marginTop: 'auto',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  color: 'rgba(255,255,255,0.75)',
+                  fontSize: isMobile ? '0.9rem' : '1rem'
+                }}>
+                  <span>Total responses: {responseStats.totalResponses}</span>
+                  {responseStats.mostActiveZip?.zip && (
+                    <span>Most active ZIP: {responseStats.mostActiveZip.zip}</span>
+                  )}
+                </div>
+              </div>
+
               <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
                 <MapContainer
                   ref={historyMapRef}
