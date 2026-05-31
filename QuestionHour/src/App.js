@@ -141,8 +141,29 @@ function App() {
   const markerRefs = useRef({});
   const [showHistory, setShowHistory] = useState(false);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
+  const [graphSize, setGraphSize] = useState({ width: 800, height: 500 });
   // Add new state for selected map style
   const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_toner');
+  const isMobile = viewportWidth <= 900;
+  const isSmallMobile = viewportWidth <= 480;
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+
+      if (networkContainerRef.current) {
+        setGraphSize({
+          width: Math.max(280, Math.floor(networkContainerRef.current.offsetWidth)),
+          height: Math.max(240, Math.floor(networkContainerRef.current.offsetHeight))
+        });
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Function to fetch current question
   const fetchCurrentQuestion = useCallback(async () => {
@@ -263,8 +284,8 @@ function App() {
   // Function to reset zoom and center network
   const resetZoom = useCallback(() => {
     if (fgRef.current) {
-      const containerWidth = networkContainerRef.current?.offsetWidth || 800;
-      const containerHeight = networkContainerRef.current?.offsetHeight || 600;
+      const containerWidth = graphSize.width;
+      const containerHeight = graphSize.height;
       
       fgRef.current.cameraPosition(
         { x: 0, y: 0, z: Math.max(containerWidth, containerHeight) / 2 },
@@ -277,7 +298,7 @@ function App() {
     if (mapRef.current) {
       mapRef.current.setView([37.0902, -95.7129], 3);
     }
-  }, []);
+  }, [graphSize.height, graphSize.width]);
 
   // Handle node click
   const handleNodeClick = useCallback((node) => {
@@ -361,14 +382,14 @@ function App() {
       {/* History Dropdown */}
       <div style={{
         position: 'fixed',
-        top: '20px',
-        left: '20px',
+        top: isMobile ? '10px' : '20px',
+        left: isMobile ? '10px' : '20px',
         zIndex: 1000
       }}>
         <button
           onClick={() => setShowHistory(true)}
           style={{
-            padding: '10px 20px',
+            padding: isSmallMobile ? '8px 12px' : '10px 20px',
             background: '#4CAF50',
             color: 'white',
             border: 'none',
@@ -377,7 +398,8 @@ function App() {
             boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '8px',
+            fontSize: isSmallMobile ? '0.85rem' : '1rem'
           }}
         >
           <span>Question History</span>
@@ -396,14 +418,14 @@ function App() {
       {/* Stats Panel Toggle Button */}
       <div style={{
         position: 'fixed',
-        top: '20px',
-        right: '20px',
+        top: isMobile ? '10px' : '20px',
+        right: isMobile ? '10px' : '20px',
         zIndex: 1000
       }}>
         <button
           onClick={() => setShowStatsPanel(!showStatsPanel)}
           style={{
-            padding: '10px 20px',
+            padding: isSmallMobile ? '8px 12px' : '10px 20px',
             background: showStatsPanel ? '#666' : '#007bff',
             color: 'white',
             border: 'none',
@@ -413,7 +435,8 @@ function App() {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            transition: 'background-color 0.3s ease'
+            transition: 'background-color 0.3s ease',
+            fontSize: isSmallMobile ? '0.85rem' : '1rem'
           }}
         >
           <span>{showStatsPanel ? 'Hide Stats' : 'Show Stats'}</span>
@@ -430,20 +453,23 @@ function App() {
         bottom: showStatsPanel ? '20px' : '-400px',
         left: '50%',
         transform: 'translateX(-50%)',
-        width: 'auto',
-        minWidth: '600px',
+        width: 'calc(100vw - 20px)',
+        maxWidth: '1200px',
+        minWidth: '0',
+        boxSizing: 'border-box',
         backgroundColor: 'rgba(0, 0, 0, 0.85)',
         boxShadow: '0 0 30px rgba(0, 0, 0, 0.3)',
         zIndex: 999,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        padding: '15px 30px',
-        borderRadius: '20px',
+        padding: isMobile ? '12px 16px' : '15px 30px',
+        borderRadius: isMobile ? '14px' : '20px',
         border: '1px solid rgba(255, 255, 255, 0.1)',
         backdropFilter: 'blur(10px)',
         display: 'flex',
-        justifyContent: 'space-between',
+        justifyContent: isMobile ? 'flex-start' : 'space-between',
         alignItems: 'center',
-        gap: '30px'
+        gap: isMobile ? '16px' : '30px',
+        overflowX: isMobile ? 'auto' : 'visible'
       }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff', whiteSpace: 'nowrap' }}>Live Stats</h3>
@@ -539,7 +565,7 @@ function App() {
         justifyContent: 'center',
         alignItems: 'center',
         gap: '10px',
-        margin: '20px 0',
+        margin: isMobile ? '12px 8px' : '20px 0',
         flexWrap: 'wrap',
         position: 'relative',
         zIndex: 900
@@ -548,13 +574,14 @@ function App() {
           onClick={getLocation}
           style={{ 
             backgroundColor: "#007bff",
-            padding: '10px 20px',
+            padding: isSmallMobile ? '8px 12px' : '10px 20px',
             borderRadius: '5px',
             border: 'none',
             color: 'white',
             cursor: 'pointer',
             opacity: isLoading ? 0.7 : 1,
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+            fontSize: isSmallMobile ? '0.85rem' : '1rem'
           }}
           disabled={isLoading}
         >
@@ -584,12 +611,13 @@ function App() {
           onClick={resetZoom} 
           style={{ 
             backgroundColor: 'black',
-            padding: '10px 20px',
+            padding: isSmallMobile ? '8px 12px' : '10px 20px',
             borderRadius: '5px',
             border: '1px solid #ccc',
             cursor: 'pointer',
             color: 'white',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+            fontSize: isSmallMobile ? '0.85rem' : '1rem'
           }}
         >
           Reset View
@@ -598,13 +626,14 @@ function App() {
         <button 
           onClick={() => setShowInfoPopup(true)}
           style={{ 
-            padding: '10px 20px',
+            padding: isSmallMobile ? '8px 12px' : '10px 20px',
             borderRadius: '5px',
             border: '1px solid #ccc',
             cursor: 'pointer',
             backgroundColor: 'black',
             color: 'white',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+            fontSize: isSmallMobile ? '0.85rem' : '1rem'
           }}
         >
           Why do you need my location?
@@ -626,7 +655,8 @@ function App() {
           borderRadius: '10px',
           boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
           zIndex: 1000,
-          maxWidth: '400px',
+          maxWidth: isMobile ? 'calc(100vw - 30px)' : '400px',
+          width: isMobile ? 'calc(100vw - 30px)' : 'auto',
           textAlign: 'center'
         }}>
           <p style={{ marginBottom: '20px' }}>We just want to show where people are who are responding a certain way!</p>
@@ -661,8 +691,8 @@ function App() {
             enableNodeDrag={true}
             enableNavigationControls={true}
             enablePointerInteraction={true}
-            width={networkContainerRef.current?.offsetWidth}
-            height={networkContainerRef.current?.offsetHeight}
+            width={graphSize.width}
+            height={graphSize.height}
             cooldownTicks={100}
             onEngineStop={() => fgRef.current?.zoomToFit(400)}
           />

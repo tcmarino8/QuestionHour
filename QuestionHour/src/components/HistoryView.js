@@ -31,6 +31,15 @@ function HistoryView({ onClose }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [visibleResponses, setVisibleResponses] = useState([]);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
+  const isMobile = viewportWidth <= 900;
+  const isSmallMobile = viewportWidth <= 480;
+
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
     // Determine map style based on selected question's theme
   const mapStyle = React.useMemo(() => {
@@ -146,17 +155,19 @@ function HistoryView({ onClose }) {
   const PlaybackControls = () => (
      <div style={{
     position: 'fixed',
-    bottom: '20px',
-    left: '20px',
+    bottom: isMobile ? '10px' : '20px',
+    left: isMobile ? '10px' : '20px',
     transform: 'none', // Remove centering
     zIndex: 2001,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    padding: '10px',
+    padding: isSmallMobile ? '8px' : '10px',
     borderRadius: '8px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
     display: 'flex',
     gap: '10px',
-    alignItems: 'center'
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    maxWidth: isMobile ? 'calc(100vw - 20px)' : 'none'
   }}>
       <button
         onClick={() => isPlaying ? setIsPlaying(false) : handlePlay()}
@@ -204,12 +215,13 @@ function HistoryView({ onClose }) {
       {/* Top left dropdown */}
       <div style={{
         position: 'fixed',
-        top: '20px',
-        left: '20px',
+        top: isMobile ? '10px' : '20px',
+        left: isMobile ? '10px' : '20px',
         zIndex: 2001,
         display: 'flex',
         gap: '10px',
-        alignItems: 'center'
+        alignItems: 'center',
+        maxWidth: isMobile ? 'calc(100vw - 20px)' : 'none'
       }}>
         <select
           value={selectedQuestion?.text || ''}
@@ -218,7 +230,8 @@ function HistoryView({ onClose }) {
             padding: '8px',
             borderRadius: '4px',
             border: '1px solid #ccc',
-            minWidth: '300px',
+            minWidth: isMobile ? '0' : '300px',
+            width: isMobile ? 'calc(100vw - 120px)' : 'auto',
             fontSize: '14px',
             backgroundColor: 'white'
           }}
@@ -264,8 +277,8 @@ function HistoryView({ onClose }) {
 
        <div style={{
         position: 'fixed',
-        top: '20px',
-        right: '20px',
+        top: isMobile ? '10px' : '20px',
+        right: isMobile ? '10px' : '20px',
         zIndex: 1000
       }}>
         <button
@@ -295,23 +308,26 @@ function HistoryView({ onClose }) {
       {/* Bottom Stats Panel */}
       <div style={{
         position: 'fixed',
-        bottom: showStatsPanel ? '20px' : '-100px',
+        bottom: showStatsPanel ? '20px' : '-120px',
         left: '50%',
         transform: 'translateX(-50%)',
-        width: 'auto',
-        minWidth: '600px',
+        width: 'calc(100vw - 20px)',
+        maxWidth: '1200px',
+        minWidth: '0',
+        boxSizing: 'border-box',
         backgroundColor: 'rgba(0, 0, 0, 0.85)',
         boxShadow: '0 0 30px rgba(0, 0, 0, 0.3)',
         zIndex: 999,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        padding: '15px 30px',
-        borderRadius: '20px',
+        padding: isMobile ? '12px 16px' : '15px 30px',
+        borderRadius: isMobile ? '14px' : '20px',
         border: '1px solid rgba(255, 255, 255, 0.1)',
         backdropFilter: 'blur(10px)',
         display: 'flex',
-        justifyContent: 'space-between',
+        justifyContent: isMobile ? 'flex-start' : 'space-between',
         alignItems: 'center',
-        gap: '30px'
+        gap: isMobile ? '16px' : '30px',
+        overflowX: isMobile ? 'auto' : 'visible'
       }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff', whiteSpace: 'nowrap' }}>Live Stats</h3>
@@ -451,11 +467,11 @@ function HistoryView({ onClose }) {
           right: 0,
           bottom: 0,
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '20px',
-          padding: '20px'
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: isMobile ? '10px' : '20px',
+          padding: isMobile ? '10px' : '20px'
         }}>
-          <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+          <div style={{ height: isMobile ? '45dvh' : '100%', minHeight: isMobile ? '280px' : '0', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
             <ForceGraph3D
               graphData={graphData}
               nodeAutoColorBy="color"
@@ -470,7 +486,7 @@ function HistoryView({ onClose }) {
               cooldownTicks={100}
             />
           </div>
-          <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+          <div style={{ height: isMobile ? '45dvh' : '100%', minHeight: isMobile ? '280px' : '0', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
             <MapContainer
               center={[37.0902, -95.7129]}
               zoom={4}
