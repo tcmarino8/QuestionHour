@@ -45,44 +45,51 @@
 }
 
 .visualization-container {
-  display: flex;
+  display: block;
   flex: 1;
   min-height: 0;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  padding: 0 12px 12px;
 }
 
 .network-visualization {
-  flex: 1;
   height: 100%;
-  border-right: 1px solid #ddd;
   position: relative;
   overflow: hidden;
 }
 
 .map-visualization {
-  flex: 1;
   height: 100%;
   position: relative;
   overflow: hidden;
 }
 
+.card-deck-container {
+  height: 100%;
+}
+
+.live-day-meta,
+.history-day-meta {
+  text-align: center;
+  color: #f0f3f8;
+  font-size: clamp(0.9rem, 1.8vw, 1.1rem);
+  letter-spacing: 0.04em;
+  margin: 8px auto 10px;
+  text-transform: capitalize;
+}
+
 @media (max-width: 900px) {
   .visualization-container {
-    flex-direction: column;
+    padding: 0 8px 8px;
     overflow: visible;
   }
 
   .network-visualization,
   .map-visualization {
     width: 100%;
-    height: 46dvh;
-    min-height: 280px;
-  }
-
-  .network-visualization {
-    border-right: none;
-    border-bottom: 1px solid #ddd;
+    height: 100%;
+    min-height: 0;
   }
 }
 

@@ -1,0 +1,104 @@
+.card-deck-shell {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.card-deck-tabs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.card-deck-tab {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.55);
+  color: #f3f3f3;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.card-deck-tab.is-active {
+  background: #1b7fe6;
+  border-color: #1b7fe6;
+}
+
+.card-deck-swiper {
+  width: 100%;
+  height: min(62vh, 780px);
+  min-height: 360px;
+  padding: 8px 12px 28px;
+}
+
+.card-deck-slide {
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0f1115;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+  transition: transform 0.24s ease, opacity 0.24s ease, box-shadow 0.24s ease;
+}
+
+.card-deck-swiper .swiper-slide {
+  transform: scale(0.95);
+  opacity: 0.78;
+  cursor: pointer;
+}
+
+.card-deck-swiper .swiper-slide-active {
+  transform: scale(1);
+  opacity: 1;
+  cursor: default;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.38);
+}
+
+.card-deck-slide-content {
+  width: 100%;
+  height: 100%;
+}
+
+.card-deck-slide-content.is-inactive {
+  pointer-events: none;
+  filter: saturate(0.84);
+}
+
+.card-deck-slide-content.is-active {
+  pointer-events: auto;
+}
+
+.card-deck-swiper .swiper-pagination-bullet {
+  background: rgba(255, 255, 255, 0.5);
+  opacity: 1;
+}
+
+.card-deck-swiper .swiper-pagination-bullet-active {
+  background: #1b7fe6;
+}
+
+@media (max-width: 900px) {
+  .card-deck-swiper {
+    height: 54dvh;
+    min-height: 320px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-deck-tab {
+    font-size: 0.8rem;
+    padding: 6px 10px;
+  }
+
+  .card-deck-swiper {
+    height: 50dvh;
+    min-height: 280px;
+    padding-bottom: 22px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}

@@ -9,6 +9,7 @@ import L from "leaflet";
 import { api } from './services/api';
 import HistoryView from './components/HistoryView';
 import { createGraphData, LAVENDER_COLOR } from './utils/visualizationUtils';
+import CardDeckSlider from './components/CardDeckSlider';
 
 // Map style configurations
 // Get Stadia API key from environment variable
@@ -150,6 +151,12 @@ function App() {
   const isMobile = viewportWidth <= 900;
   const isSmallMobile = viewportWidth <= 480;
   const isReflectionTheme = (currentQuestion.theme || '').toLowerCase() === 'reflection';
+  const metadataDate = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric'
+  });
+  const dayThemeLabel = `${metadataDate} · ${(currentQuestion.theme || 'general').replace(/_/g, ' ')}`;
 
   useEffect(() => {
     const handleResize = () => {
@@ -345,6 +352,21 @@ function App() {
       setError('Failed to update visualization');
     }
   }, [currentQuestion]);
+
+  const handleLiveCardChange = useCallback((index) => {
+    if (index === 1 && mapRef.current) {
+      setTimeout(() => mapRef.current.invalidateSize(), 120);
+    }
+
+    if (index === 0 && networkContainerRef.current) {
+      setTimeout(() => {
+        setGraphSize({
+          width: Math.max(280, Math.floor(networkContainerRef.current.offsetWidth)),
+          height: Math.max(240, Math.floor(networkContainerRef.current.offsetHeight))
+        });
+      }, 120);
+    }
+  }, []);
 
 
   // Load initial data
@@ -706,114 +728,96 @@ function App() {
         </div>
       )}
 
-      <div className="visualization-container">
-        <div className="network-visualization" ref={networkContainerRef}>
-          <ForceGraph3D
-            ref={fgRef}
-            graphData={graphData}
-            nodeAutoColorBy="color"
-            nodeLabel="name"
-            linkColor='color'
-            linkWidth={4}
-            linkDirectionalParticles={2}
-            linkDirectionalParticleWidth={2}
-            onNodeClick={handleNodeClick}
-            enableNodeDrag={true}
-            enableNavigationControls={true}
-            enablePointerInteraction={true}
-            width={graphSize.width}
-            height={graphSize.height}
-            cooldownTicks={100}
-            onEngineStop={() => fgRef.current?.zoomToFit(400)}
-          />
-        </div>
-        <div className="map-visualization">
-          {/* Add map style selector */}
-          <div style={{
-            position: 'absolute',
-            top: '10px',
-            right: '10px',
-            zIndex: 1000,
-            background: 'white',
-            padding: '5px',
-            borderRadius: '5px',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-          }}>
-            {/* <select 
-              value={selectedMapStyle}
-              onChange={(e) => setSelectedMapStyle(e.target.value)}
-              style={{
-                padding: '5px',
-                borderRadius: '3px',
-                border: '1px solid #ccc'
+      <div className="live-day-meta">{dayThemeLabel}</div>
+      <div className="visualization-container card-deck-container">
+        <CardDeckSlider
+          labels={['Network View', 'Map View']}
+          initialIndex={0}
+          onActiveIndexChange={handleLiveCardChange}
+        >
+          <div className="network-visualization" ref={networkContainerRef}>
+            <ForceGraph3D
+              ref={fgRef}
+              graphData={graphData}
+              nodeAutoColorBy="color"
+              nodeLabel="name"
+              linkColor='color'
+              linkWidth={4}
+              linkDirectionalParticles={2}
+              linkDirectionalParticleWidth={2}
+              onNodeClick={handleNodeClick}
+              enableNodeDrag={true}
+              enableNavigationControls={true}
+              enablePointerInteraction={true}
+              width={graphSize.width}
+              height={graphSize.height}
+              cooldownTicks={100}
+              onEngineStop={() => fgRef.current?.zoomToFit(400)}
+            />
+          </div>
+
+          <div className="map-visualization">
+            <MapContainer
+              ref={mapRef}
+              center={[37.0902, -95.7129]}
+              zoom={4}
+              style={{ height: '100%', width: '100%' }}
+              whenCreated={(map) => {
+                mapRef.current = map;
               }}
             >
-              {Object.entries(MAP_STYLES).map(([key, style]) => (
-                <option key={key} value={key}>{style.name}</option>
+              <TileLayer
+                url={MAP_STYLES[selectedMapStyle].url}
+                attribution={MAP_STYLES[selectedMapStyle].attribution}
+              />
+              {mapPoints.map(point => (
+                <CircleMarker
+                  key={point.id}
+                  center={[point.lat, point.lng]}
+                  radius={Math.min(5 + point.stats.total, 30)}
+                  fillColor={point.color}
+                  color="#fff"
+                  weight={1}
+                  fillOpacity={0.7}
+                  ref={ref => {
+                    if (ref) {
+                      markerRefs.current[point.id] = ref;
+                    }
+                  }}
+                  eventHandlers={{
+                    click: () => {
+                      mapRef.current.setView([point.lat, point.lng], 10);
+                    }
+                  }}
+                >
+                  <Popup>
+                    <div style={{
+                      padding: '10px',
+                      textAlign: 'center',
+                      backgroundColor: isReflectionTheme ? 'rgba(181, 126, 220, 0.14)' : 'transparent',
+                      borderRadius: '8px'
+                    }}>
+                      <h3 style={{ margin: '0 0 10px 0', color: isReflectionTheme ? LAVENDER_COLOR : '#111' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
+                      {isReflectionTheme ? (
+                        <div>
+                          <span style={{ color: LAVENDER_COLOR, fontWeight: 'bold' }}>
+                            Reflected: {point.stats.reflected || 0}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
+                          <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
+                        </div>
+                      )}
+                      <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
+                    </div>
+                  </Popup>
+                </CircleMarker>
               ))}
-            </select> */}
+            </MapContainer>
           </div>
-          
-          <MapContainer
-            ref={mapRef}
-            center={[37.0902, -95.7129]}
-            zoom={4}
-            style={{ height: '100%', width: '100%' }}
-            whenCreated={(map) => {
-              mapRef.current = map;
-            }}
-          >
-            <TileLayer
-              url={MAP_STYLES[selectedMapStyle].url}
-              attribution={MAP_STYLES[selectedMapStyle].attribution}
-            />
-            {mapPoints.map(point => (
-              <CircleMarker
-                key={point.id}
-                center={[point.lat, point.lng]}
-                radius={Math.min(5 + point.stats.total, 30)}
-                fillColor={point.color}
-                color="#fff"
-                weight={1}
-                fillOpacity={0.7}
-                ref={ref => {
-                  if (ref) {
-                    markerRefs.current[point.id] = ref;
-                  }
-                }}
-                eventHandlers={{
-                  click: () => {
-                    mapRef.current.setView([point.lat, point.lng], 10);
-                  }
-                }}
-              >
-                <Popup>
-                  <div style={{
-                    padding: '10px',
-                    textAlign: 'center',
-                    backgroundColor: isReflectionTheme ? 'rgba(181, 126, 220, 0.14)' : 'transparent',
-                    borderRadius: '8px'
-                  }}>
-                    <h3 style={{ margin: '0 0 10px 0', color: isReflectionTheme ? LAVENDER_COLOR : '#111' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
-                    {isReflectionTheme ? (
-                      <div>
-                        <span style={{ color: LAVENDER_COLOR, fontWeight: 'bold' }}>
-                          Reflected: {point.stats.reflected || 0}
-                        </span>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
-                        <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
-                      </div>
-                    )}
-                    <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
-                  </div>
-                </Popup>
-              </CircleMarker>
-            ))}
-          </MapContainer>
-        </div>
+        </CardDeckSlider>
       </div>
       {showHistory && <HistoryView onClose={() => setShowHistory(false)} />}
     </div>

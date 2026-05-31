@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
 import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { createGraphData, LAVENDER_COLOR } from '../utils/visualizationUtils';
 import {MAP_STYLES, THEME_TO_MAP_STYLE} from '../App';
+import CardDeckSlider from './CardDeckSlider';
 
 function HistoryView({ onClose }) {
   const [questions, setQuestions] = useState([]);
@@ -36,6 +37,24 @@ function HistoryView({ onClose }) {
   const isMobile = viewportWidth <= 900;
   const isSmallMobile = viewportWidth <= 480;
   const isReflectionTheme = (selectedQuestion?.theme || '').toLowerCase() === 'reflection';
+  const historyMapRef = useRef(null);
+
+  const metadataDate = selectedQuestion?.createdAt
+    ? new Date(selectedQuestion.createdAt).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric'
+      })
+    : '';
+  const historyMetaLabel = selectedQuestion
+    ? `${metadataDate} · ${(selectedQuestion.theme || 'general').replace(/_/g, ' ')}`
+    : '';
+
+  const handleHistoryCardChange = useCallback((index) => {
+    if (index === 1 && historyMapRef.current) {
+      setTimeout(() => historyMapRef.current.invalidateSize(), 120);
+    }
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setViewportWidth(window.innerWidth);
@@ -468,76 +487,88 @@ function HistoryView({ onClose }) {
       {selectedQuestion && (
         <div style={{
           position: 'fixed',
-          top: 0,
+          top: isMobile ? 62 : 72,
           left: 0,
           right: 0,
-          bottom: 0,
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-          gap: isMobile ? '10px' : '20px',
-          padding: isMobile ? '10px' : '20px'
+          bottom: isMobile ? 72 : 78,
+          padding: isMobile ? '8px 10px' : '12px 20px',
+          overflow: 'hidden'
         }}>
-          <div style={{ height: isMobile ? '45dvh' : '100%', minHeight: isMobile ? '280px' : '0', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
-            <ForceGraph3D
-              graphData={graphData}
-              nodeAutoColorBy="color"
-              nodeLabel="name"
-              linkColor='color'
-              linkWidth={4}
-              linkDirectionalParticles={2}
-              linkDirectionalParticleWidth={2}
-              enableNodeDrag={true}
-              enableNavigationControls={true}
-              enablePointerInteraction={true}
-              cooldownTicks={100}
-            />
-          </div>
-          <div style={{ height: isMobile ? '45dvh' : '100%', minHeight: isMobile ? '280px' : '0', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
-            <MapContainer
-              center={[37.0902, -95.7129]}
-              zoom={4}
-              style={{ height: '100%', width: '100%' }}
+          <div className="history-day-meta">{historyMetaLabel}</div>
+          <div className="card-deck-container" style={{ height: 'calc(100% - 34px)' }}>
+            <CardDeckSlider
+              labels={['Network View', 'Map View']}
+              initialIndex={0}
+              onActiveIndexChange={handleHistoryCardChange}
             >
-              <TileLayer
-                url={MAP_STYLES[mapStyle].url}
-                attribution={MAP_STYLES[mapStyle].attribution}
-              />
-              {mapPoints.map(point => (
-                <CircleMarker
-                  key={point.id}
-                  center={[point.lat, point.lng]}
-                  radius={Math.min(5 + point.stats.total, 30)}
-                  fillColor={point.color}
-                  color="#fff"
-                  weight={1}
-                  fillOpacity={0.7}
+              <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+                <ForceGraph3D
+                  graphData={graphData}
+                  nodeAutoColorBy="color"
+                  nodeLabel="name"
+                  linkColor='color'
+                  linkWidth={4}
+                  linkDirectionalParticles={2}
+                  linkDirectionalParticleWidth={2}
+                  enableNodeDrag={true}
+                  enableNavigationControls={true}
+                  enablePointerInteraction={true}
+                  cooldownTicks={100}
+                />
+              </div>
+
+              <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+                <MapContainer
+                  ref={historyMapRef}
+                  center={[37.0902, -95.7129]}
+                  zoom={4}
+                  style={{ height: '100%', width: '100%' }}
+                  whenCreated={(map) => {
+                    historyMapRef.current = map;
+                  }}
                 >
-                  <Popup>
-                    <div style={{
-                      padding: '10px',
-                      textAlign: 'center',
-                      backgroundColor: isReflectionTheme ? 'rgba(181, 126, 220, 0.14)' : 'transparent',
-                      borderRadius: '8px'
-                    }}>
-                      <h3 style={{ margin: '0 0 10px 0', color: isReflectionTheme ? LAVENDER_COLOR : '#111' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
-                      {isReflectionTheme ? (
-                        <div>
-                          <span style={{ color: LAVENDER_COLOR, fontWeight: 'bold' }}>
-                            Reflected: {point.stats.reflected || 0}
-                          </span>
+                  <TileLayer
+                    url={MAP_STYLES[mapStyle].url}
+                    attribution={MAP_STYLES[mapStyle].attribution}
+                  />
+                  {mapPoints.map(point => (
+                    <CircleMarker
+                      key={point.id}
+                      center={[point.lat, point.lng]}
+                      radius={Math.min(5 + point.stats.total, 30)}
+                      fillColor={point.color}
+                      color="#fff"
+                      weight={1}
+                      fillOpacity={0.7}
+                    >
+                      <Popup>
+                        <div style={{
+                          padding: '10px',
+                          textAlign: 'center',
+                          backgroundColor: isReflectionTheme ? 'rgba(181, 126, 220, 0.14)' : 'transparent',
+                          borderRadius: '8px'
+                        }}>
+                          <h3 style={{ margin: '0 0 10px 0', color: isReflectionTheme ? LAVENDER_COLOR : '#111' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
+                          {isReflectionTheme ? (
+                            <div>
+                              <span style={{ color: LAVENDER_COLOR, fontWeight: 'bold' }}>
+                                Reflected: {point.stats.reflected || 0}
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
+                              <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
+                            </div>
+                          )}
+                          <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
                         </div>
-                      ) : (
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
-                          <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
-                        </div>
-                      )}
-                      <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              ))}
-            </MapContainer>
+                      </Popup>
+                    </CircleMarker>
+                  ))}
+                </MapContainer>
+              </div>
+            </CardDeckSlider>
           </div>
         </div>
       )}
