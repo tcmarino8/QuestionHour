@@ -51,7 +51,7 @@ function HistoryView({ onClose }) {
     : '';
 
   const handleHistoryCardChange = useCallback((index) => {
-    if (index === 1 && historyMapRef.current) {
+    if (index === 0 && historyMapRef.current) {
       setTimeout(() => historyMapRef.current.invalidateSize(), 120);
     }
   }, []);
@@ -181,11 +181,11 @@ function HistoryView({ onClose }) {
     transform: 'none', // Remove centering
     zIndex: 2001,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    padding: isSmallMobile ? '8px' : '10px',
-    borderRadius: '8px',
+    padding: isSmallMobile ? '10px' : '14px',
+    borderRadius: '12px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
     display: 'flex',
-    gap: '10px',
+    gap: '12px',
     alignItems: 'center',
     flexWrap: 'wrap',
     maxWidth: isMobile ? 'calc(100vw - 20px)' : 'none'
@@ -193,12 +193,14 @@ function HistoryView({ onClose }) {
       <button
         onClick={() => isPlaying ? setIsPlaying(false) : handlePlay()}
         style={{
-          padding: '8px 16px',
+          padding: isSmallMobile ? '10px 16px' : '12px 22px',
           background: isPlaying ? '#f44336' : '#4CAF50',
           color: 'white',
           border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer'
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: isSmallMobile ? '1rem' : '1.1rem',
+          fontWeight: 700
         }}
       >
         {isPlaying ? 'Pause' : currentIndex >= (selectedQuestion?.responses?.length || 0) ? 'Replay' : 'Play'}
@@ -207,9 +209,11 @@ function HistoryView({ onClose }) {
         value={playbackSpeed}
         onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
         style={{
-          padding: '8px',
-          borderRadius: '4px',
-          border: '1px solid #ccc'
+          padding: isSmallMobile ? '10px' : '11px 12px',
+          borderRadius: '8px',
+          border: '1px solid #ccc',
+          fontSize: isSmallMobile ? '1rem' : '1.05rem',
+          fontWeight: 600
         }}
       >
         <option value={0.5}>0.5x</option>
@@ -217,7 +221,7 @@ function HistoryView({ onClose }) {
         <option value={2}>2x</option>
         <option value={5}>5x</option>
       </select>
-      <div style={{ color: '#666' }}>
+      <div style={{ color: '#555', fontSize: isSmallMobile ? '1rem' : '1.1rem', fontWeight: 600 }}>
         Responses: {visibleResponses.length} / {selectedQuestion?.responses?.length || 0}
       </div>
     </div>
@@ -497,26 +501,10 @@ function HistoryView({ onClose }) {
           <div className="history-day-meta">{historyMetaLabel}</div>
           <div className="card-deck-container" style={{ height: 'calc(100% - 34px)' }}>
             <CardDeckSlider
-              labels={['Network View', 'Map View']}
+              labels={['Map View', 'Network View']}
               initialIndex={0}
               onActiveIndexChange={handleHistoryCardChange}
             >
-              <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
-                <ForceGraph3D
-                  graphData={graphData}
-                  nodeAutoColorBy="color"
-                  nodeLabel="name"
-                  linkColor='color'
-                  linkWidth={4}
-                  linkDirectionalParticles={2}
-                  linkDirectionalParticleWidth={2}
-                  enableNodeDrag={true}
-                  enableNavigationControls={true}
-                  enablePointerInteraction={true}
-                  cooldownTicks={100}
-                />
-              </div>
-
               <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
                 <MapContainer
                   ref={historyMapRef}
@@ -567,6 +555,22 @@ function HistoryView({ onClose }) {
                     </CircleMarker>
                   ))}
                 </MapContainer>
+              </div>
+
+              <div style={{ height: '100%', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+                <ForceGraph3D
+                  graphData={graphData}
+                  nodeAutoColorBy="color"
+                  nodeLabel="name"
+                  linkColor='color'
+                  linkWidth={4}
+                  linkDirectionalParticles={2}
+                  linkDirectionalParticleWidth={2}
+                  enableNodeDrag={true}
+                  enableNavigationControls={true}
+                  enablePointerInteraction={true}
+                  cooldownTicks={100}
+                />
               </div>
             </CardDeckSlider>
           </div>
