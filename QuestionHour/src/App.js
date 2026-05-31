@@ -191,12 +191,25 @@ function App() {
   const [voteState, setVoteState] = useState({ hasVoted: false, response: null });
   const [liveDayLayers, setLiveDayLayers] = useState([]);
   const [activeLayerIndex, setActiveLayerIndex] = useState(0);
+  const [isPlaybackMode, setIsPlaybackMode] = useState(false);
+  const [isLayerPlaying, setIsLayerPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [playbackCursor, setPlaybackCursor] = useState(0);
   // Add new state for selected map style
   const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_toner');
   const todayLaDateKey = useMemo(() => getLaDateKey(new Date()), []);
   const activeLayer = liveDayLayers[activeLayerIndex] || null;
+  const sortedActiveLayerResponses = useMemo(() => {
+    const responses = Array.isArray(activeLayer?.responses) ? [...activeLayer.responses] : [];
+    responses.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    return responses;
+  }, [activeLayer]);
+  const totalLayerResponses = sortedActiveLayerResponses.length;
+  const playbackAtEnd = playbackCursor >= totalLayerResponses;
+  const visibleLayerResponses = isPlaybackMode
+    ? sortedActiveLayerResponses.slice(0, playbackCursor)
+    : sortedActiveLayerResponses;
   const isMobile = viewportWidth <= 900;
-  const isSmallMobile = viewportWidth <= 480;
   const currentThemeId = (activeLayer?.displayTheme || currentQuestion.theme || 'general').toLowerCase();
   const isReflectionTheme = currentThemeId === 'reflection';
   const metadataDate = activeLayer
@@ -415,7 +428,7 @@ function App() {
     }
   }, [currentQuestion]);
 
-  const applyLayerVisualization = useCallback((layer) => {
+  const applyLayerVisualization = useCallback((layer, layerResponses) => {
     const layerQuestion = {
       text: layer?.displayQuestionText || 'Daily aggregate',
       theme: layer?.displayTheme || 'general'
@@ -423,7 +436,7 @@ function App() {
 
     const { graphData: nextGraphData, mapPoints: nextMapPoints, stats } = createGraphData(
       layerQuestion,
-      Array.isArray(layer?.responses) ? layer.responses : []
+      Array.isArray(layerResponses) ? layerResponses : []
     );
 
     setGraphData(nextGraphData);
@@ -461,6 +474,34 @@ function App() {
     }
   }, []);
 
+  const handleTogglePlayback = useCallback(() => {
+    if (totalLayerResponses === 0) return;
+
+    if (!isPlaybackMode) {
+      setIsPlaybackMode(true);
+      setPlaybackCursor(0);
+      setIsLayerPlaying(true);
+      return;
+    }
+
+    if (isLayerPlaying) {
+      setIsLayerPlaying(false);
+      return;
+    }
+
+    if (playbackAtEnd) {
+      setPlaybackCursor(0);
+    }
+
+    setIsLayerPlaying(true);
+  }, [isLayerPlaying, isPlaybackMode, playbackAtEnd, totalLayerResponses]);
+
+  const handleShowFullLayer = useCallback(() => {
+    setIsLayerPlaying(false);
+    setIsPlaybackMode(false);
+    setPlaybackCursor(totalLayerResponses);
+  }, [totalLayerResponses]);
+
 
   // Poll current question + live day stack.
   useEffect(() => {
@@ -477,12 +518,36 @@ function App() {
   // Render stats/map/network from selected day layer when available.
   useEffect(() => {
     if (activeLayer) {
-      applyLayerVisualization(activeLayer);
+      applyLayerVisualization(activeLayer, visibleLayerResponses);
       return;
     }
 
     updateVisualization();
-  }, [activeLayer, applyLayerVisualization, updateVisualization]);
+  }, [activeLayer, applyLayerVisualization, updateVisualization, visibleLayerResponses]);
+
+  useEffect(() => {
+    setIsPlaybackMode(false);
+    setIsLayerPlaying(false);
+    setPlaybackCursor(totalLayerResponses);
+  }, [activeLayerIndex, totalLayerResponses]);
+
+  useEffect(() => {
+    if (!isPlaybackMode || !isLayerPlaying || totalLayerResponses === 0) return;
+
+    const intervalTime = 500 / playbackSpeed;
+    const interval = setInterval(() => {
+      setPlaybackCursor((previous) => {
+        if (previous >= totalLayerResponses) {
+          setIsLayerPlaying(false);
+          return previous;
+        }
+
+        return previous + 1;
+      });
+    }, intervalTime);
+
+    return () => clearInterval(interval);
+  }, [isLayerPlaying, isPlaybackMode, playbackSpeed, totalLayerResponses]);
 
   // Add a new vote
   async function addVote(sentiment) {
@@ -581,6 +646,43 @@ function App() {
         </div>
 
         <div className="live-depth-stage visualization-container card-deck-container">
+          <div className="live-playback-controls">
+            <button
+              type="button"
+              className="live-playback-btn"
+              onClick={handleTogglePlayback}
+              disabled={totalLayerResponses === 0}
+            >
+              {isLayerPlaying ? 'Pause Playback' : playbackAtEnd && isPlaybackMode ? 'Replay Playback' : 'Play Playback'}
+            </button>
+
+            <button
+              type="button"
+              className="live-playback-btn ghost"
+              onClick={handleShowFullLayer}
+              disabled={totalLayerResponses === 0 || (!isPlaybackMode && playbackAtEnd)}
+            >
+              Show Full Layer
+            </button>
+
+            <label className="live-playback-speed">
+              Speed
+              <select
+                value={playbackSpeed}
+                onChange={(event) => setPlaybackSpeed(Number(event.target.value))}
+              >
+                <option value={0.5}>0.5x</option>
+                <option value={1}>1x</option>
+                <option value={2}>2x</option>
+                <option value={5}>5x</option>
+              </select>
+            </label>
+
+            <div className="live-playback-count">
+              Responses shown: {visibleLayerResponses.length} / {totalLayerResponses}
+            </div>
+          </div>
+
           <CardDeckSlider
             labels={['Question & Vote', 'Map View', 'Network View']}
             initialIndex={0}
@@ -589,7 +691,7 @@ function App() {
           >
             <div className="question-vote-card">
               <div className="question-vote-chip">Question Of The Day</div>
-              <div className="question-vote-text">{currentQuestion.text || 'Loading question...'}</div>
+              <div className="question-vote-text">{activeDisplayQuestion || currentQuestion.text || 'Loading question...'}</div>
 
               <div className="question-float-row">
                 {currentVisuals.map((icon, index) => (
