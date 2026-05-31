@@ -186,6 +186,7 @@ function App() {
   const mapRef = useRef(null);
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
+  const geoInsightsCacheRef = useRef(new Map());
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [graphSize, setGraphSize] = useState({ width: 800, height: 500 });
   const [voteState, setVoteState] = useState({ hasVoted: false, response: null });
@@ -195,6 +196,12 @@ function App() {
   const [isLayerPlaying, setIsLayerPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [playbackCursor, setPlaybackCursor] = useState(0);
+  const [locationInsights, setLocationInsights] = useState({
+    zip: '',
+    country: '',
+    continent: '',
+    isLoading: false
+  });
   // Add new state for selected map style
   const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_toner');
   const todayLaDateKey = useMemo(() => getLaDateKey(new Date()), []);
@@ -549,6 +556,73 @@ function App() {
     return () => clearInterval(interval);
   }, [isLayerPlaying, isPlaybackMode, playbackSpeed, totalLayerResponses]);
 
+  useEffect(() => {
+    const targetZip = responseStats?.mostActiveZip?.zip || '';
+    if (!targetZip) {
+      setLocationInsights({ zip: '', country: '', continent: '', isLoading: false });
+      return;
+    }
+
+    const referenceResponse =
+      visibleLayerResponses.find((entry) => entry.location === targetZip && typeof entry.lat === 'number' && typeof entry.lng === 'number') ||
+      sortedActiveLayerResponses.find((entry) => entry.location === targetZip && typeof entry.lat === 'number' && typeof entry.lng === 'number');
+
+    if (!referenceResponse) {
+      setLocationInsights({ zip: targetZip, country: 'Unknown', continent: 'Unknown', isLoading: false });
+      return;
+    }
+
+    const key = `${referenceResponse.lat.toFixed(3)},${referenceResponse.lng.toFixed(3)}`;
+    if (geoInsightsCacheRef.current.has(key)) {
+      const cached = geoInsightsCacheRef.current.get(key);
+      setLocationInsights({ zip: targetZip, country: cached.country, continent: cached.continent, isLoading: false });
+      return;
+    }
+
+    let cancelled = false;
+    setLocationInsights({ zip: targetZip, country: 'Loading...', continent: 'Loading...', isLoading: true });
+
+    const resolveInsights = async () => {
+      try {
+        const reverseUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${referenceResponse.lat}&lon=${referenceResponse.lng}`;
+        const reverseResponse = await fetch(reverseUrl, {
+          headers: { 'Accept-Language': 'en' }
+        });
+        const reverseData = await reverseResponse.json();
+
+        const country = reverseData?.address?.country || 'Unknown';
+        const countryCode = (reverseData?.address?.country_code || '').toUpperCase();
+
+        let continent = 'Unknown';
+        if (countryCode) {
+          try {
+            const countryMetaResponse = await fetch(`https://restcountries.com/v3.1/alpha/${countryCode}?fields=region`);
+            const countryMeta = await countryMetaResponse.json();
+            continent = Array.isArray(countryMeta) ? (countryMeta[0]?.region || continent) : (countryMeta?.region || continent);
+          } catch {
+            continent = 'Unknown';
+          }
+        }
+
+        geoInsightsCacheRef.current.set(key, { country, continent });
+
+        if (!cancelled) {
+          setLocationInsights({ zip: targetZip, country, continent, isLoading: false });
+        }
+      } catch {
+        if (!cancelled) {
+          setLocationInsights({ zip: targetZip, country: 'Unknown', continent: 'Unknown', isLoading: false });
+        }
+      }
+    };
+
+    resolveInsights();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [responseStats, sortedActiveLayerResponses, visibleLayerResponses]);
+
   // Add a new vote
   async function addVote(sentiment) {
     if (!userLocation) {
@@ -646,43 +720,6 @@ function App() {
         </div>
 
         <div className="live-depth-stage visualization-container card-deck-container">
-          <div className="live-playback-controls">
-            <button
-              type="button"
-              className="live-playback-btn"
-              onClick={handleTogglePlayback}
-              disabled={totalLayerResponses === 0}
-            >
-              {isLayerPlaying ? 'Pause Playback' : playbackAtEnd && isPlaybackMode ? 'Replay Playback' : 'Play Playback'}
-            </button>
-
-            <button
-              type="button"
-              className="live-playback-btn ghost"
-              onClick={handleShowFullLayer}
-              disabled={totalLayerResponses === 0 || (!isPlaybackMode && playbackAtEnd)}
-            >
-              Show Full Layer
-            </button>
-
-            <label className="live-playback-speed">
-              Speed
-              <select
-                value={playbackSpeed}
-                onChange={(event) => setPlaybackSpeed(Number(event.target.value))}
-              >
-                <option value={0.5}>0.5x</option>
-                <option value={1}>1x</option>
-                <option value={2}>2x</option>
-                <option value={5}>5x</option>
-              </select>
-            </label>
-
-            <div className="live-playback-count">
-              Responses shown: {visibleLayerResponses.length} / {totalLayerResponses}
-            </div>
-          </div>
-
           <CardDeckSlider
             labels={['Question & Vote', 'Map View', 'Network View']}
             initialIndex={0}
@@ -700,6 +737,12 @@ function App() {
                   </span>
                 ))}
               </div>
+
+              {responseStats.totalResponses > 0 && (
+                <div className="question-location-insight">
+                  Most active: {locationInsights.continent || '...'} / {locationInsights.country || '...'} / {locationInsights.zip || '...'}
+                </div>
+              )}
 
               {isViewingHistoricalLayer ? (
                 <div className="question-analysis-grid">
@@ -886,6 +929,45 @@ function App() {
               />
             </div>
           </CardDeckSlider>
+
+          <div className="live-playback-controls">
+            <div className="live-playback-primary">
+              <button
+                type="button"
+                className="live-playback-btn"
+                onClick={handleTogglePlayback}
+                disabled={totalLayerResponses === 0}
+              >
+                {isLayerPlaying ? 'Pause Playback' : playbackAtEnd && isPlaybackMode ? 'Replay Playback' : 'Play Playback'}
+              </button>
+
+              <button
+                type="button"
+                className="live-playback-btn ghost"
+                onClick={handleShowFullLayer}
+                disabled={totalLayerResponses === 0 || (!isPlaybackMode && playbackAtEnd)}
+              >
+                Show Full Layer
+              </button>
+
+              <label className="live-playback-speed">
+                Speed
+                <select
+                  value={playbackSpeed}
+                  onChange={(event) => setPlaybackSpeed(Number(event.target.value))}
+                >
+                  <option value={0.5}>0.5x</option>
+                  <option value={1}>1x</option>
+                  <option value={2}>2x</option>
+                  <option value={5}>5x</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="live-playback-count">
+              Responses shown: {visibleLayerResponses.length} / {totalLayerResponses}
+            </div>
+          </div>
         </div>
       </div>
     </div>
