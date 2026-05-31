@@ -45,9 +45,11 @@
 }
 
 .visualization-container {
-  display: block;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   flex: 1;
-  min-height: 0;
+  min-height: calc(100dvh - 160px);
   position: relative;
   overflow: visible;
   padding: 0 12px 12px;
@@ -66,7 +68,10 @@
 }
 
 .card-deck-container {
-  height: 100%;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  height: auto;
 }
 
 .live-day-meta,
@@ -77,6 +82,21 @@
   letter-spacing: 0.04em;
   margin: 8px auto 10px;
   text-transform: capitalize;
+}
+
+.live-top-question {
+  width: min(980px, calc(100% - 32px));
+  margin: 0 auto 12px;
+  padding: 10px 14px;
+  text-align: center;
+  color: #f7fbff;
+  font-size: clamp(0.95rem, 1.9vw, 1.2rem);
+  line-height: 1.35;
+  font-weight: 700;
+  border-radius: 12px;
+  background: rgba(10, 18, 33, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
 .question-vote-card {
@@ -223,6 +243,7 @@
 
 @media (max-width: 900px) {
   .visualization-container {
+    min-height: calc(100dvh - 140px);
     padding: 0 8px 8px;
     overflow: visible;
   }

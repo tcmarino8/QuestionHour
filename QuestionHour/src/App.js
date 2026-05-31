@@ -153,7 +153,6 @@ function App() {
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
   const [showHistory, setShowHistory] = useState(false);
-  const [showStatsPanel, setShowStatsPanel] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [graphSize, setGraphSize] = useState({ width: 800, height: 500 });
   const [voteState, setVoteState] = useState({ hasVoted: false, response: null });
@@ -471,155 +470,6 @@ function App() {
         </button>
       </div>
 
-      {/* Stats Panel Toggle Button */}
-      <div style={{
-        position: 'fixed',
-        top: isMobile ? '10px' : '20px',
-        right: isMobile ? '10px' : '20px',
-        zIndex: 1000
-      }}>
-        <button
-          onClick={() => setShowStatsPanel(!showStatsPanel)}
-          style={{
-            padding: isSmallMobile ? '8px 12px' : '10px 20px',
-            background: showStatsPanel ? '#666' : '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: 'background-color 0.3s ease',
-            fontSize: isSmallMobile ? '0.85rem' : '1rem'
-          }}
-        >
-          <span>{showStatsPanel ? 'Hide Stats' : 'Show Stats'}</span>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d={showStatsPanel ? "M10 6L2 6" : "M2 6L10 6"} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d={showStatsPanel ? "M6 2L6 10" : "M6 2L6 10"} stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      </div>
-
-      {/* Bottom Stats Panel */}
-      <div style={{
-        position: 'fixed',
-        bottom: showStatsPanel ? '20px' : '-400px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 'calc(100vw - 20px)',
-        maxWidth: '1200px',
-        minWidth: '0',
-        boxSizing: 'border-box',
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        boxShadow: '0 0 30px rgba(0, 0, 0, 0.3)',
-        zIndex: 999,
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        padding: isMobile ? '12px 16px' : '15px 30px',
-        borderRadius: isMobile ? '14px' : '20px',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex',
-        justifyContent: isMobile ? 'flex-start' : 'space-between',
-        alignItems: 'center',
-        gap: isMobile ? '16px' : '30px',
-        overflowX: isMobile ? 'auto' : 'visible'
-      }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff', whiteSpace: 'nowrap' }}>Live Stats</h3>
-            <div style={{ 
-              display: 'flex',
-              gap: '20px',
-              alignItems: 'center',
-              borderLeft: '1px solid rgba(255, 255, 255, 0.2)',
-              paddingLeft: '20px'
-            }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ color: isReflectionTheme ? LAVENDER_COLOR : '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>
-                  {isReflectionTheme ? responseStats.reflectedCount : responseStats.agreeCount}
-                </div>
-                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>
-                  {isReflectionTheme ? 'Reflected' : 'Agree'}
-                </div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#f44336', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.disagreeCount}</div>
-                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Disagree</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#2196F3', fontSize: '1.4rem', fontWeight: 'bold' }}>{responseStats.totalResponses}</div>
-                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Total</div>
-              </div>
-            </div>
-          </div>
-          
-          {responseStats.mostActiveZip.zip && (
-            <div style={{ 
-              borderLeft: '1px solid rgba(255, 255, 255, 0.2)',
-              paddingLeft: '20px'
-            }}>
-              <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>Most Active ZIP</div>
-              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostActiveZip.zip}</div>
-              <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.8rem' }}>{responseStats.mostActiveZip.count} responses</div>
-              </div>
-                )}
-          {!isReflectionTheme && responseStats.mostDividedZip.zip && (
-            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Divided ZIP</div>
-              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.mostDividedZip.zip}</div>
-              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
-                {Math.round(responseStats.mostDividedZip.percentAgree * 100)}% Agree / {Math.round(responseStats.mostDividedZip.percentDisagree * 100)}% Disagree
-              </div>
-            </div>
-          )}
-          {!isReflectionTheme && responseStats.maxAgreeZip.zip && (
-            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Agree ZIP</div>
-              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxAgreeZip.zip}</div>
-              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
-                {Math.round(responseStats.maxAgreeZip.percentAgree * 100)}% Agree
-              </div>
-            </div>
-          )}
-          {!isReflectionTheme && responseStats.maxDisagreeZip.zip && (
-            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '20px' }}>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>Most Disagree ZIP</div>
-              <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>{responseStats.maxDisagreeZip.zip}</div>
-              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
-                {Math.round(responseStats.maxDisagreeZip.percentDisagree * 100)}% Disagree
-              </div>
-            </div>
-          )}
-            
-
-          
-          <button
-            onClick={() => setShowStatsPanel(false)}
-            style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '50%',
-              width: '30px',
-              height: '30px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#fff',
-              fontSize: '18px',
-              padding: 0,
-              transition: 'all 0.2s ease',
-              ':hover': {
-                background: 'rgba(255, 255, 255, 0.2)'
-              }
-            }}
-          >
-            ×
-          </button>
-      </div>
-
       {showInfoPopup && (
         <div style={{
           position: 'fixed',
@@ -653,6 +503,9 @@ function App() {
       )}
 
       <div className="live-day-meta">{dayThemeLabel}</div>
+      {voteState.hasVoted && (
+        <div className="live-top-question">{currentQuestion.text || 'Question of the day'}</div>
+      )}
       <div className="visualization-container card-deck-container">
         <CardDeckSlider
           labels={['Question & Vote', 'Map View', 'Network View']}
