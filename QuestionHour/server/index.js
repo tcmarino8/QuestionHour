@@ -66,6 +66,26 @@ function validateResponseBody(body) {
   }
 }
 
+function toIsoString(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value.toString === 'function') return value.toString();
+  return String(value);
+}
+
+function toLosAngelesDateKey(isoValue) {
+  if (!isoValue) return '';
+  const parsed = new Date(isoValue);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(parsed);
+}
+
 // Get all responses
 app.get('/api/responses', async (req, res) => {
   try {
@@ -100,6 +120,125 @@ app.get('/api/questions/current/responses', async (req, res) => {
   } catch (error) {
     console.error('Error fetching current question responses:', error);
     res.status(500).json({ error: 'Failed to fetch current question responses', details: error.message });
+  }
+});
+
+// Get aggregated live stack buckets by LA day.
+// Buckets merge all responses from questions created on the same LA day.
+app.get('/api/questions/live-stack', async (req, res) => {
+  console.log('GET /api/questions/live-stack - Request received');
+
+  try {
+    const requestedDays = Number.parseInt(req.query.days, 10);
+    const days = Number.isFinite(requestedDays)
+      ? Math.min(Math.max(requestedDays, 1), 14)
+      : 7;
+
+    const requestedLookback = Number.parseInt(req.query.lookbackDays, 10);
+    const lookbackDays = Number.isFinite(requestedLookback)
+      ? Math.min(Math.max(requestedLookback, days), 365)
+      : 45;
+
+    const query = `
+      MATCH (q:Question)
+      WHERE q.createdAt >= datetime() - duration({days: $lookbackDays})
+      OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
+      RETURN q, r
+      ORDER BY q.createdAt ASC, r.timestamp ASC
+    `;
+
+    const records = await runQuery(query, { lookbackDays: neo4j.int(lookbackDays) });
+
+    const dayBuckets = new Map();
+
+    records.forEach((record) => {
+      const questionNode = record.get('q');
+      if (!questionNode) return;
+
+      const q = questionNode.properties || {};
+      const questionCreatedAt = toIsoString(q.createdAt);
+      const dayKey = toLosAngelesDateKey(questionCreatedAt);
+      if (!dayKey) return;
+
+      if (!dayBuckets.has(dayKey)) {
+        dayBuckets.set(dayKey, {
+          dateKey: dayKey,
+          dayTimestamp: `${dayKey}T00:00:00`,
+          questionEntries: [],
+          questionSet: new Set(),
+          responseSet: new Set(),
+          responses: []
+        });
+      }
+
+      const bucket = dayBuckets.get(dayKey);
+      const questionText = q.text || '';
+
+      if (questionText && !bucket.questionSet.has(questionText)) {
+        bucket.questionSet.add(questionText);
+        bucket.questionEntries.push({
+          text: questionText,
+          theme: q.theme || 'general',
+          createdAt: questionCreatedAt
+        });
+      }
+
+      const responseNode = record.get('r');
+      if (responseNode) {
+        const r = responseNode.properties || {};
+        const responseId = responseNode.elementId || `${toIsoString(r.timestamp)}-${r.location || ''}-${questionText}`;
+        if (bucket.responseSet.has(responseId)) {
+          return;
+        }
+
+        bucket.responseSet.add(responseId);
+        bucket.responses.push({
+          response: r.response,
+          timestamp: toIsoString(r.timestamp),
+          location: r.location,
+          lat: r.lat,
+          lng: r.lng,
+          question: questionText
+        });
+      }
+    });
+
+    const layers = Array.from(dayBuckets.values())
+      .filter((bucket) => bucket.responses.length > 0)
+      .map((bucket) => {
+        bucket.questionEntries.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        const firstQuestion = bucket.questionEntries[0] || { text: 'Daily aggregate', theme: 'general' };
+
+        const agreeCount = bucket.responses.filter((r) => r.response === 'agree').length;
+        const disagreeCount = bucket.responses.filter((r) => r.response === 'disagree').length;
+        const reflectedCount = bucket.responses.filter((r) => r.response === 'reflected').length;
+
+        return {
+          dateKey: bucket.dateKey,
+          timestamp: bucket.dayTimestamp,
+          displayQuestionText: firstQuestion.text,
+          displayTheme: firstQuestion.theme || 'general',
+          questionCount: bucket.questionSet.size,
+          questionTexts: bucket.questionEntries.map((entry) => entry.text),
+          responseCount: bucket.responses.length,
+          agreeCount,
+          disagreeCount,
+          reflectedCount,
+          responses: bucket.responses
+        };
+      })
+      .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
+      .slice(0, days);
+
+    return res.json({
+      daysRequested: days,
+      lookbackDays,
+      count: layers.length,
+      layers
+    });
+  } catch (error) {
+    console.error('Error fetching aggregated live stack:', error);
+    return res.status(500).json({ error: 'Failed to fetch live stack', details: error.message });
   }
 });
 

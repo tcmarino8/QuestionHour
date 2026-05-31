@@ -1,12 +1,11 @@
 import './App.css';
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import { getVoteButtonStyles } from './utils/themeUtils';
 import 'leaflet/dist/leaflet.css';
 import L from "leaflet";
 import { api } from './services/api';
-import HistoryView from './components/HistoryView';
 import { createGraphData, LAVENDER_COLOR } from './utils/visualizationUtils';
 import CardDeckSlider from './components/CardDeckSlider';
 
@@ -73,6 +72,41 @@ const THEME_VISUALS = {
   reflection: ['🧘', '💭', '📖', '🌅', '🪞'],
   general: ['✨', '💡', '🌐', '🧠']
 };
+
+const LA_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Los_Angeles',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+
+function getLaDateKey(dateLike) {
+  const parsed = new Date(dateLike);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return LA_DATE_FORMATTER.format(parsed);
+}
+
+function formatLayerDayLabel(dateKey, todayKey) {
+  if (!dateKey) return 'Unknown day';
+  if (dateKey === todayKey) return 'Today';
+
+  const today = new Date(`${todayKey}T12:00:00`);
+  const layerDate = new Date(`${dateKey}T12:00:00`);
+
+  if (!Number.isNaN(today.getTime()) && !Number.isNaN(layerDate.getTime())) {
+    const diffDays = Math.round((today - layerDate) / 86400000);
+    if (diffDays === 1) return 'Yesterday';
+  }
+
+  const friendly = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(friendly.getTime())) return dateKey;
+
+  return friendly.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+}
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -152,22 +186,29 @@ function App() {
   const mapRef = useRef(null);
   const networkContainerRef = useRef(null);
   const markerRefs = useRef({});
-  const [showHistory, setShowHistory] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [graphSize, setGraphSize] = useState({ width: 800, height: 500 });
   const [voteState, setVoteState] = useState({ hasVoted: false, response: null });
+  const [liveDayLayers, setLiveDayLayers] = useState([]);
+  const [activeLayerIndex, setActiveLayerIndex] = useState(0);
   // Add new state for selected map style
   const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_toner');
+  const todayLaDateKey = useMemo(() => getLaDateKey(new Date()), []);
+  const activeLayer = liveDayLayers[activeLayerIndex] || null;
   const isMobile = viewportWidth <= 900;
   const isSmallMobile = viewportWidth <= 480;
-  const isReflectionTheme = (currentQuestion.theme || '').toLowerCase() === 'reflection';
-  const currentThemeId = (currentQuestion.theme || 'general').toLowerCase();
-  const metadataDate = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric'
-  });
+  const currentThemeId = (activeLayer?.displayTheme || currentQuestion.theme || 'general').toLowerCase();
+  const isReflectionTheme = currentThemeId === 'reflection';
+  const metadataDate = activeLayer
+    ? formatLayerDayLabel(activeLayer.dateKey, todayLaDateKey)
+    : new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric'
+      });
   const dayThemeLabel = `${metadataDate} · ${currentThemeId.replace(/_/g, ' ')}`;
+  const activeDisplayQuestion = activeLayer?.displayQuestionText || currentQuestion.text;
+  const isViewingHistoricalLayer = Boolean(activeLayer && activeLayer.dateKey !== todayLaDateKey);
   const voteStorageKey = `qhour-vote-${currentQuestion.text || 'unknown'}`;
   const currentVisuals = THEME_VISUALS[currentThemeId] || THEME_VISUALS.general;
 
@@ -213,15 +254,10 @@ function App() {
     }
   }, []);
 
-  // Poll for current question updates every 30 seconds
-  useEffect(() => {
-    fetchCurrentQuestion();
-    const interval = setInterval(fetchCurrentQuestion, 30000);
-    return () => clearInterval(interval);
-  }, [fetchCurrentQuestion]);
-
   // Update graph data when current question changes
   useEffect(() => {
+    if (activeLayer) return;
+
     setGraphData(prevData => ({
       ...prevData,
       nodes: prevData.nodes.map(node => 
@@ -234,14 +270,13 @@ function App() {
           : node
       )
     }));
-  }, [currentQuestion]);
+  }, [currentQuestion, activeLayer]);
 
-    // Set map style based on current theme/day
+  // Set map style based on selected layer/current theme
   useEffect(() => {
-    // Use the theme from the current question, fallback to 'general'
-    const theme = (currentQuestion.theme || 'general').toLowerCase();
+    const theme = currentThemeId;
     setSelectedMapStyle(THEME_TO_MAP_STYLE[theme] || 'stamen_toner');
-  }, [currentQuestion.theme]);
+  }, [currentThemeId]);
 
 
   // Function to get ZIP code from coordinates using Google Places API
@@ -380,6 +415,37 @@ function App() {
     }
   }, [currentQuestion]);
 
+  const applyLayerVisualization = useCallback((layer) => {
+    const layerQuestion = {
+      text: layer?.displayQuestionText || 'Daily aggregate',
+      theme: layer?.displayTheme || 'general'
+    };
+
+    const { graphData: nextGraphData, mapPoints: nextMapPoints, stats } = createGraphData(
+      layerQuestion,
+      Array.isArray(layer?.responses) ? layer.responses : []
+    );
+
+    setGraphData(nextGraphData);
+    setMapPoints(nextMapPoints);
+    setResponseStats(stats);
+  }, []);
+
+  const fetchLiveStack = useCallback(async () => {
+    try {
+      const stack = await api.getLiveStack(7);
+      const layers = Array.isArray(stack?.layers) ? stack.layers : [];
+      setLiveDayLayers(layers);
+      setActiveLayerIndex((previous) => {
+        if (layers.length === 0) return 0;
+        return Math.min(previous, layers.length - 1);
+      });
+    } catch (stackError) {
+      console.error('Error fetching live day stack:', stackError);
+      setError('Failed to fetch live day layers');
+    }
+  }, []);
+
   const handleLiveCardChange = useCallback((index) => {
     if (index === 1 && mapRef.current) {
       setTimeout(() => mapRef.current.invalidateSize(), 120);
@@ -396,10 +462,27 @@ function App() {
   }, []);
 
 
-  // Load initial data
+  // Poll current question + live day stack.
   useEffect(() => {
+    const refresh = async () => {
+      await fetchCurrentQuestion();
+      await fetchLiveStack();
+    };
+
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => clearInterval(interval);
+  }, [fetchCurrentQuestion, fetchLiveStack]);
+
+  // Render stats/map/network from selected day layer when available.
+  useEffect(() => {
+    if (activeLayer) {
+      applyLayerVisualization(activeLayer);
+      return;
+    }
+
     updateVisualization();
-  }, [updateVisualization]);
+  }, [activeLayer, applyLayerVisualization, updateVisualization]);
 
   // Add a new vote
   async function addVote(sentiment) {
@@ -419,6 +502,8 @@ function App() {
         lng: userLocation.lng
       });
 
+      await fetchLiveStack();
+      setActiveLayerIndex(0);
       await updateVisualization();
 
       const nextVoteState = { hasVoted: true, response: sentiment };
@@ -440,36 +525,6 @@ function App() {
 
   return (
     <div className="App">
-      {/* History Dropdown */}
-      <div style={{
-        position: 'fixed',
-        top: isMobile ? '10px' : '20px',
-        left: isMobile ? '10px' : '20px',
-        zIndex: 1000
-      }}>
-        <button
-          onClick={() => setShowHistory(true)}
-          style={{
-            padding: isSmallMobile ? '8px 12px' : '10px 20px',
-            background: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: isSmallMobile ? '0.85rem' : '1rem'
-          }}
-        >
-          <span>Question History</span>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 4L6 8L10 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      </div>
-
       {showInfoPopup && (
         <div style={{
           position: 'fixed',
@@ -503,193 +558,234 @@ function App() {
       )}
 
       <div className="live-day-meta">{dayThemeLabel}</div>
-      {voteState.hasVoted && (
-        <div className="live-top-question">{currentQuestion.text || 'Question of the day'}</div>
+      {(voteState.hasVoted || activeLayer) && (
+        <div className="live-top-question">{activeDisplayQuestion || 'Question of the day'}</div>
       )}
-      <div className="visualization-container card-deck-container">
-        <CardDeckSlider
-          labels={['Question & Vote', 'Map View', 'Network View']}
-          initialIndex={0}
-          loop={true}
-          onActiveIndexChange={handleLiveCardChange}
-        >
-          <div className="question-vote-card">
-            <div className="question-vote-chip">Question Of The Day</div>
-            <div className="question-vote-text">{currentQuestion.text || 'Loading question...'}</div>
+      <div className="live-depth-layout">
+        <div className="live-depth-timeline" aria-label="Live depth timeline">
+          {liveDayLayers.length === 0 ? (
+            <div className="live-depth-empty">No response layers yet</div>
+          ) : (
+            liveDayLayers.map((layer, index) => (
+              <button
+                key={layer.dateKey}
+                type="button"
+                className={`live-depth-node ${index === activeLayerIndex ? 'is-active' : ''}`}
+                onClick={() => setActiveLayerIndex(index)}
+              >
+                <span>{formatLayerDayLabel(layer.dateKey, todayLaDateKey)}</span>
+                <small>{layer.responseCount} responses</small>
+              </button>
+            ))
+          )}
+        </div>
 
-            <div className="question-float-row">
-              {currentVisuals.map((icon, index) => (
-                <span key={`${icon}-${index}`} className="question-float-token" style={{ animationDelay: `${index * 0.15}s` }}>
-                  {icon}
-                </span>
-              ))}
+        <div className="live-depth-stage visualization-container card-deck-container">
+          <CardDeckSlider
+            labels={['Question & Vote', 'Map View', 'Network View']}
+            initialIndex={0}
+            loop={true}
+            onActiveIndexChange={handleLiveCardChange}
+          >
+            <div className="question-vote-card">
+              <div className="question-vote-chip">Question Of The Day</div>
+              <div className="question-vote-text">{currentQuestion.text || 'Loading question...'}</div>
+
+              <div className="question-float-row">
+                {currentVisuals.map((icon, index) => (
+                  <span key={`${icon}-${index}`} className="question-float-token" style={{ animationDelay: `${index * 0.15}s` }}>
+                    {icon}
+                  </span>
+                ))}
+              </div>
+
+              {isViewingHistoricalLayer ? (
+                <div className="question-analysis-grid">
+                  <div className="analysis-box agree">
+                    <span>Agree</span>
+                    <strong>{responseStats.agreeCount}</strong>
+                  </div>
+                  <div className="analysis-box disagree">
+                    <span>Disagree</span>
+                    <strong>{responseStats.disagreeCount}</strong>
+                  </div>
+                  <div className="analysis-box reflected">
+                    <span>Reflected</span>
+                    <strong>{responseStats.reflectedCount || 0}</strong>
+                  </div>
+                  <div className="analysis-box total">
+                    <span>Total</span>
+                    <strong>{responseStats.totalResponses}</strong>
+                  </div>
+                  <div className="analysis-user-response">
+                    Historical layer selected. Voting is only available for today.
+                  </div>
+                </div>
+              ) : !voteState.hasVoted ? (
+                <>
+                  <div className="question-vote-actions">
+                    <button
+                      onClick={getLocation}
+                      className="question-vote-btn location"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Getting Location...' : 'Get My Location'}
+                    </button>
+
+                    {isReflectionTheme ? (
+                      <button
+                        onClick={() => addVote(REFLECTED_TYPE)}
+                        className="question-vote-btn reflected"
+                        disabled={!userLocation}
+                      >
+                        A gentle reflection!
+                      </button>
+                    ) : (
+                      <div className="question-vote-split">
+                        <button
+                          onClick={() => addVote('agree')}
+                          style={{
+                            ...getVoteButtonStyles(currentQuestion.theme || 'general', 'agree'),
+                            opacity: !userLocation ? 0.5 : 1
+                          }}
+                          disabled={!userLocation}
+                        >
+                          Agree
+                        </button>
+                        <button
+                          onClick={() => addVote('disagree')}
+                          style={{
+                            ...getVoteButtonStyles(currentQuestion.theme || 'general', 'disagree'),
+                            opacity: !userLocation ? 0.5 : 1
+                          }}
+                          disabled={!userLocation}
+                        >
+                          Disagree
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setShowInfoPopup(true)}
+                      className="question-vote-btn info"
+                    >
+                      Why do you need my location?
+                    </button>
+                  </div>
+
+                  {error && <p className="error" style={{ marginTop: '8px' }}>{error}</p>}
+                  {successMessage && <p className="success" style={{ marginTop: '8px' }}>{successMessage}</p>}
+                </>
+              ) : (
+                <div className="question-analysis-grid">
+                  <div className="analysis-box agree">
+                    <span>Agree</span>
+                    <strong>{responseStats.agreeCount}</strong>
+                  </div>
+                  <div className="analysis-box disagree">
+                    <span>Disagree</span>
+                    <strong>{responseStats.disagreeCount}</strong>
+                  </div>
+                  <div className="analysis-box reflected">
+                    <span>Reflected</span>
+                    <strong>{responseStats.reflectedCount || 0}</strong>
+                  </div>
+                  <div className="analysis-box total">
+                    <span>Total</span>
+                    <strong>{responseStats.totalResponses}</strong>
+                  </div>
+                  <div className="analysis-user-response">
+                    Your response today: <b>{voteState.response}</b>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {!voteState.hasVoted ? (
-              <>
-                <div className="question-vote-actions">
-                  <button
-                    onClick={getLocation}
-                    className="question-vote-btn location"
-                    disabled={isLoading}
+            <div className="map-visualization">
+              <MapContainer
+                ref={mapRef}
+                center={[37.0902, -95.7129]}
+                zoom={4}
+                style={{ height: '100%', width: '100%' }}
+                whenCreated={(map) => {
+                  mapRef.current = map;
+                }}
+              >
+                <TileLayer
+                  url={MAP_STYLES[selectedMapStyle].url}
+                  attribution={MAP_STYLES[selectedMapStyle].attribution}
+                />
+                {mapPoints.map(point => (
+                  <CircleMarker
+                    key={point.id}
+                    center={[point.lat, point.lng]}
+                    radius={Math.min(5 + point.stats.total, 30)}
+                    fillColor={point.color}
+                    color="#fff"
+                    weight={1}
+                    fillOpacity={0.7}
+                    ref={ref => {
+                      if (ref) {
+                        markerRefs.current[point.id] = ref;
+                      }
+                    }}
+                    eventHandlers={{
+                      click: () => {
+                        mapRef.current.setView([point.lat, point.lng], 10);
+                      }
+                    }}
                   >
-                    {isLoading ? 'Getting Location...' : 'Get My Location'}
-                  </button>
+                    <Popup>
+                      <div style={{
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: isReflectionTheme ? 'rgba(181, 126, 220, 0.14)' : 'transparent',
+                        borderRadius: '8px'
+                      }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: isReflectionTheme ? LAVENDER_COLOR : '#111' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
+                        {isReflectionTheme ? (
+                          <div>
+                            <span style={{ color: LAVENDER_COLOR, fontWeight: 'bold' }}>
+                              Reflected: {point.stats.reflected || 0}
+                            </span>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
+                            <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
+                          </div>
+                        )}
+                        <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                ))}
+              </MapContainer>
+            </div>
 
-                  {isReflectionTheme ? (
-                    <button
-                      onClick={() => addVote(REFLECTED_TYPE)}
-                      className="question-vote-btn reflected"
-                      disabled={!userLocation}
-                    >
-                      A gentle reflection!
-                    </button>
-                  ) : (
-                    <div className="question-vote-split">
-                      <button
-                        onClick={() => addVote('agree')}
-                        style={{
-                          ...getVoteButtonStyles(currentQuestion.theme || 'general', 'agree'),
-                          opacity: !userLocation ? 0.5 : 1
-                        }}
-                        disabled={!userLocation}
-                      >
-                        Agree
-                      </button>
-                      <button
-                        onClick={() => addVote('disagree')}
-                        style={{
-                          ...getVoteButtonStyles(currentQuestion.theme || 'general', 'disagree'),
-                          opacity: !userLocation ? 0.5 : 1
-                        }}
-                        disabled={!userLocation}
-                      >
-                        Disagree
-                      </button>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setShowInfoPopup(true)}
-                    className="question-vote-btn info"
-                  >
-                    Why do you need my location?
-                  </button>
-                </div>
-
-                {error && <p className="error" style={{ marginTop: '8px' }}>{error}</p>}
-                {successMessage && <p className="success" style={{ marginTop: '8px' }}>{successMessage}</p>}
-              </>
-            ) : (
-              <div className="question-analysis-grid">
-                <div className="analysis-box agree">
-                  <span>Agree</span>
-                  <strong>{responseStats.agreeCount}</strong>
-                </div>
-                <div className="analysis-box disagree">
-                  <span>Disagree</span>
-                  <strong>{responseStats.disagreeCount}</strong>
-                </div>
-                <div className="analysis-box reflected">
-                  <span>Reflected</span>
-                  <strong>{responseStats.reflectedCount || 0}</strong>
-                </div>
-                <div className="analysis-box total">
-                  <span>Total</span>
-                  <strong>{responseStats.totalResponses}</strong>
-                </div>
-                <div className="analysis-user-response">
-                  Your response today: <b>{voteState.response}</b>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="map-visualization">
-            <MapContainer
-              ref={mapRef}
-              center={[37.0902, -95.7129]}
-              zoom={4}
-              style={{ height: '100%', width: '100%' }}
-              whenCreated={(map) => {
-                mapRef.current = map;
-              }}
-            >
-              <TileLayer
-                url={MAP_STYLES[selectedMapStyle].url}
-                attribution={MAP_STYLES[selectedMapStyle].attribution}
+            <div className="network-visualization" ref={networkContainerRef}>
+              <ForceGraph3D
+                ref={fgRef}
+                graphData={graphData}
+                nodeAutoColorBy="color"
+                nodeLabel="name"
+                linkColor='color'
+                linkWidth={4}
+                linkDirectionalParticles={2}
+                linkDirectionalParticleWidth={2}
+                onNodeClick={handleNodeClick}
+                enableNodeDrag={true}
+                enableNavigationControls={true}
+                enablePointerInteraction={true}
+                width={graphSize.width}
+                height={graphSize.height}
+                cooldownTicks={100}
+                onEngineStop={() => fgRef.current?.zoomToFit(400)}
               />
-              {mapPoints.map(point => (
-                <CircleMarker
-                  key={point.id}
-                  center={[point.lat, point.lng]}
-                  radius={Math.min(5 + point.stats.total, 30)}
-                  fillColor={point.color}
-                  color="#fff"
-                  weight={1}
-                  fillOpacity={0.7}
-                  ref={ref => {
-                    if (ref) {
-                      markerRefs.current[point.id] = ref;
-                    }
-                  }}
-                  eventHandlers={{
-                    click: () => {
-                      mapRef.current.setView([point.lat, point.lng], 10);
-                    }
-                  }}
-                >
-                  <Popup>
-                    <div style={{
-                      padding: '10px',
-                      textAlign: 'center',
-                      backgroundColor: isReflectionTheme ? 'rgba(181, 126, 220, 0.14)' : 'transparent',
-                      borderRadius: '8px'
-                    }}>
-                      <h3 style={{ margin: '0 0 10px 0', color: isReflectionTheme ? LAVENDER_COLOR : '#111' }}>ZIP Code: {point.id.replace('zip-', '')}</h3>
-                      {isReflectionTheme ? (
-                        <div>
-                          <span style={{ color: LAVENDER_COLOR, fontWeight: 'bold' }}>
-                            Reflected: {point.stats.reflected || 0}
-                          </span>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'green' }}>Agree: {point.stats.agree}</span>
-                          <span style={{ color: 'red' }}>Disagree: {point.stats.disagree}</span>
-                        </div>
-                      )}
-                      <p style={{ margin: '10px 0 0 0' }}>Total Votes: {point.stats.total}</p>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              ))}
-            </MapContainer>
-          </div>
-
-          <div className="network-visualization" ref={networkContainerRef}>
-            <ForceGraph3D
-              ref={fgRef}
-              graphData={graphData}
-              nodeAutoColorBy="color"
-              nodeLabel="name"
-              linkColor='color'
-              linkWidth={4}
-              linkDirectionalParticles={2}
-              linkDirectionalParticleWidth={2}
-              onNodeClick={handleNodeClick}
-              enableNodeDrag={true}
-              enableNavigationControls={true}
-              enablePointerInteraction={true}
-              width={graphSize.width}
-              height={graphSize.height}
-              cooldownTicks={100}
-              onEngineStop={() => fgRef.current?.zoomToFit(400)}
-            />
-          </div>
-        </CardDeckSlider>
+            </div>
+          </CardDeckSlider>
+        </div>
       </div>
-      {showHistory && <HistoryView onClose={() => setShowHistory(false)} />}
     </div>
   );
 }

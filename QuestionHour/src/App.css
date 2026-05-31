@@ -55,6 +55,61 @@
   padding: 0 12px 12px;
 }
 
+.live-depth-layout {
+  width: min(1380px, calc(100% - 12px));
+  margin: 0 auto;
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.live-depth-stage {
+  flex: 1;
+  min-width: 0;
+}
+
+.live-depth-timeline {
+  width: 148px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.live-depth-node {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(5, 10, 20, 0.55);
+  color: #f4f8ff;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.live-depth-node small {
+  color: rgba(240, 246, 255, 0.78);
+  font-size: 0.74rem;
+}
+
+.live-depth-node.is-active {
+  border-color: #1d8bf3;
+  box-shadow: 0 0 0 2px rgba(29, 139, 243, 0.25);
+}
+
+.live-depth-empty {
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  color: rgba(240, 246, 255, 0.86);
+  font-size: 0.85rem;
+  padding: 10px;
+  text-align: center;
+}
+
 .network-visualization {
   height: 100%;
   position: relative;
@@ -242,6 +297,23 @@
 }
 
 @media (max-width: 900px) {
+  .live-depth-layout {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .live-depth-timeline {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    justify-content: flex-start;
+  }
+
+  .live-depth-node {
+    min-width: 132px;
+  }
+
   .visualization-container {
     min-height: calc(100dvh - 140px);
     padding: 0 8px 8px;

@@ -28,6 +28,18 @@ const getCurrentQuestionResponses = async () => {
   }
 };
 
+const getLiveStack = async (days = 7) => {
+  const safeDays = Number.isFinite(days) ? Math.max(1, Math.min(days, 14)) : 7;
+  console.log('Fetching live stack from:', `${API_BASE_URL}/api/questions/live-stack?days=${safeDays}`);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/questions/live-stack?days=${safeDays}`);
+    return handleResponse(response);
+  } catch (error) {
+    console.error('Error in getLiveStack:', error);
+    throw error;
+  }
+};
+
 console.log('Environment:', process.env.NODE_ENV);
 console.log('API Base URL:', API_BASE_URL);
 
@@ -47,6 +59,9 @@ export const api = {
 
   // Get responses for current question only
   getCurrentQuestionResponses,
+
+  // Get aggregated live stack layers
+  getLiveStack,
 
   // Get all responses
   getResponses: async () => {
