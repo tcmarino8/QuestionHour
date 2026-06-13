@@ -173,6 +173,24 @@
   box-shadow: 0 0 0 2px rgba(29, 139, 243, 0.25);
 }
 
+.live-depth-return {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(9, 16, 29, 0.7);
+  color: #f4f8ff;
+  text-align: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.live-depth-return.is-active {
+  border-color: #1d8bf3;
+  box-shadow: 0 0 0 2px rgba(29, 139, 243, 0.25);
+  background: rgba(13, 32, 58, 0.85);
+}
+
 .live-depth-empty {
   border-radius: 12px;
   border: 1px dashed rgba(255, 255, 255, 0.25);

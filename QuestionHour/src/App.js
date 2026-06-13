@@ -467,14 +467,12 @@ function App() {
       setActiveLayerIndex((previous) => {
         if (layers.length === 0) return -1;
 
-        const todayIndex = layers.findIndex((layer) => layer?.dateKey === todayLaDateKey);
-
         if (previous < 0) {
-          return todayIndex;
+          return -1;
         }
 
         if (previous >= layers.length) {
-          return todayIndex >= 0 ? todayIndex : -1;
+          return -1;
         }
 
         return previous;
@@ -483,7 +481,14 @@ function App() {
       console.error('Error fetching live day stack:', stackError);
       setError('Failed to fetch live day layers');
     }
-  }, [todayLaDateKey]);
+  }, []);
+
+  const handleReturnToToday = useCallback(() => {
+    setActiveLayerIndex(-1);
+    setIsPlaybackMode(false);
+    setIsLayerPlaying(false);
+    setPlaybackCursor(0);
+  }, []);
 
   const handleLiveCardChange = useCallback((index) => {
     if (index === 1 && mapRef.current) {
@@ -721,6 +726,14 @@ function App() {
       )}
       <div className="live-depth-layout">
         <div className="live-depth-timeline" aria-label="Live depth timeline">
+          <button
+            type="button"
+            className={`live-depth-return ${!activeLayer ? 'is-active' : ''}`}
+            onClick={handleReturnToToday}
+          >
+            Today
+          </button>
+
           {liveDayLayers.length === 0 ? (
             <div className="live-depth-empty">No response layers yet</div>
           ) : (
