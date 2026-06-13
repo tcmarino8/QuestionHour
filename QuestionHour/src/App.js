@@ -204,7 +204,7 @@ function App() {
   });
   // Add new state for selected map style
   const [selectedMapStyle, setSelectedMapStyle] = useState('stamen_toner');
-  const todayLaDateKey = useMemo(() => getLaDateKey(new Date()), []);
+  const [todayLaDateKey, setTodayLaDateKey] = useState(() => getLaDateKey(new Date()));
   const activeLayer = liveDayLayers[activeLayerIndex] || null;
   const sortedActiveLayerResponses = useMemo(() => {
     const responses = Array.isArray(activeLayer?.responses) ? [...activeLayer.responses] : [];
@@ -231,6 +231,14 @@ function App() {
   const isViewingHistoricalLayer = Boolean(activeLayer && activeLayer.dateKey !== todayLaDateKey);
   const voteStorageKey = `qhour-vote-${currentQuestion.text || 'unknown'}`;
   const currentVisuals = THEME_VISUALS[currentThemeId] || THEME_VISUALS.general;
+
+  useEffect(() => {
+    const refreshDateKey = () => setTodayLaDateKey(getLaDateKey(new Date()));
+    refreshDateKey();
+
+    const interval = setInterval(refreshDateKey, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!currentQuestion.text) return;

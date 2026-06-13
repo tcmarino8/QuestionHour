@@ -16,6 +16,25 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const MAX_HEADLINES_FOR_QUESTION = 15;
 const MAX_HEADLINE_PARSE_LIMIT = 30;
+const LA_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Los_Angeles',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+const LA_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Los_Angeles',
+  weekday: 'long'
+});
+const WEEKDAY_TO_INDEX = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6
+};
 
 
 // Neo4j connection
@@ -78,12 +97,11 @@ function toLosAngelesDateKey(isoValue) {
   const parsed = new Date(isoValue);
   if (Number.isNaN(parsed.getTime())) return '';
 
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Los_Angeles',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(parsed);
+  return LA_DATE_FORMATTER.format(parsed);
+}
+
+function getTodayLosAngelesDateKey() {
+  return LA_DATE_FORMATTER.format(new Date());
 }
 
 // Get all responses
@@ -344,18 +362,31 @@ app.get('/api/questions/current', async (req, res) => {
   console.log('GET /api/questions/current - Request received');
   console.log("Req.body ", req.body)
   try {
-    // First check for a valid question from today
-    const todayQuery = `
+    const laTodayDateKey = getTodayLosAngelesDateKey();
+    const laYesterdayDateKey = toLosAngelesDateKey(new Date(Date.now() - 86400000).toISOString());
+
+    const recentQuestionsQuery = `
       MATCH (q:Question)
-      WHERE date(q.createdAt) = date() AND q.text IS NOT NULL
-      WITH q
-      ORDER BY q.createdAt DESC
-      LIMIT 1
+      WHERE q.text IS NOT NULL
       RETURN q
+      ORDER BY q.createdAt DESC
+      LIMIT 50
     `;
-    
+
     console.log('Checking for today\'s question');
-    let result = await runQuery(todayQuery);
+    const recentQuestionRecords = await runQuery(recentQuestionsQuery);
+    const getRecordForDateKey = (dateKey) =>
+      recentQuestionRecords.find((record) => {
+        const node = record.get('q');
+        const props = node?.properties || {};
+        return toLosAngelesDateKey(toIsoString(props.createdAt)) === dateKey;
+      });
+
+    let result = [];
+    const todaysRecord = getRecordForDateKey(laTodayDateKey);
+    if (todaysRecord) {
+      result = [todaysRecord];
+    }
     
     if (result.length === 0) {
       // If no question from today, check for current question
@@ -367,11 +398,19 @@ app.get('/api/questions/current', async (req, res) => {
       
       console.log('No question from today, checking current question');
       result = await runQuery(currentQuery);
+
+      if (result.length > 0) {
+        const currentProps = result[0].get('q')?.properties || {};
+        const currentDateKey = toLosAngelesDateKey(toIsoString(currentProps.createdAt));
+        if (currentDateKey !== laTodayDateKey) {
+          console.log('Current question is stale for LA day, rotating it now');
+          result = [];
+        }
+      }
       
       // Only generate a new question if we don't have a valid one and it's after noon PST
       if (result.length === 0) {
-        const laNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
-        const isPastNoon = laNow.getHours() >= 12;
+        const isPastNoon = getLosAngelesHour() >= 12;
         
         if (isPastNoon) {
           console.log('No current question found and past noon PST, generating new one');
@@ -379,22 +418,17 @@ app.get('/api/questions/current', async (req, res) => {
           result = await runQuery(currentQuery);
         } else {
           console.log('No current question found but before noon PST, using yesterday\'s question');
-          const yesterdayQuery = `
-            MATCH (q:Question)
-            WHERE date(q.createdAt) = date() - duration('P1D') AND q.text IS NOT NULL
-            RETURN q
-            ORDER BY q.createdAt DESC
-            LIMIT 1
-          `;
-          result = await runQuery(yesterdayQuery);
+          const yesterdayRecord = getRecordForDateKey(laYesterdayDateKey);
+          result = yesterdayRecord ? [yesterdayRecord] : [];
         }
       }
     } else {
       // If found today's question, ensure it's marked as current and has the correct theme
       const todayTheme = getTodayTheme();
+      const todaysNode = result[0].get('q');
       const updateQuery = `
         MATCH (q:Question)
-        WHERE date(q.createdAt) = date()
+        WHERE elementId(q) = $questionId
         SET q.current = true,
             q.theme = $theme,
             q.aiGenerated = coalesce(q.aiGenerated, false),
@@ -402,7 +436,10 @@ app.get('/api/questions/current', async (req, res) => {
         RETURN q
       `;
       console.log('Found today\'s question, ensuring it\'s marked as current with theme:', todayTheme);
-      result = await runQuery(updateQuery, { theme: todayTheme });
+      result = await runQuery(updateQuery, {
+        questionId: todaysNode.elementId,
+        theme: todayTheme
+      });
     }
     
     if (result.length === 0) {
@@ -433,11 +470,21 @@ const themes = [
 ];
 
 function getTodayTheme() {
-  // Compute day of week in Los Angeles timezone regardless of server locale
-  const laNowString = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
-  const laNow = new Date(laNowString);
-  const day = laNow.getDay(); // 0 = Sunday, 1 = Monday, ...
+  // Compute day of week in Los Angeles timezone without locale-string parsing.
+  const weekdayName = LA_WEEKDAY_FORMATTER.format(new Date()).toLowerCase();
+  const day = WEEKDAY_TO_INDEX[weekdayName] ?? 0;
   return themes[day];
+}
+
+function getLosAngelesHour() {
+  const hourString = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: '2-digit',
+    hour12: false
+  }).format(new Date());
+
+  const hour = Number.parseInt(hourString, 10);
+  return Number.isFinite(hour) ? hour : 0;
 }
 
 function themeIdToNatural(themeId) {
@@ -787,31 +834,41 @@ Guidelines:
 
 async function setQuestionOfTheDay() {
   // First check if we already have a question from today
-  const todayQuery = `
+  const recentQuestionsQuery = `
     MATCH (q:Question)
-    WHERE date(q.createdAt) = date() AND q.text IS NOT NULL
+    WHERE q.text IS NOT NULL
     RETURN q
     ORDER BY q.createdAt DESC
-    LIMIT 1
+    LIMIT 50
   `;
   
   const theme = getTodayTheme();
+  const todayDateKey = getTodayLosAngelesDateKey();
   
   try {
-    const existingQuestion = await runQuery(todayQuery);
-    if (existingQuestion.length > 0) {
+    const recentQuestions = await runQuery(recentQuestionsQuery);
+    const todaysRecord = recentQuestions.find((record) => {
+      const node = record.get('q');
+      const props = node?.properties || {};
+      return toLosAngelesDateKey(toIsoString(props.createdAt)) === todayDateKey;
+    });
+
+    if (todaysRecord) {
       console.log('Question for today already exists, using it');
       // Make sure it's marked as current and has the correct theme
       const updateQuery = `
         MATCH (q:Question)
-        WHERE date(q.createdAt) = date()
+        WHERE elementId(q) = $questionId
         SET q.current = true,
             q.theme = $theme,
             q.aiGenerated = coalesce(q.aiGenerated, false),
             q.updatedAt = datetime()
         RETURN q
       `;
-      const result = await runQuery(updateQuery, { theme });
+      const result = await runQuery(updateQuery, {
+        questionId: todaysRecord.get('q').elementId,
+        theme
+      });
       return result[0].get('q').properties;
     }
   } catch (e) {
