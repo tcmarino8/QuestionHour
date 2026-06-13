@@ -88,24 +88,31 @@ function getLaDateKey(dateLike) {
 
 function formatLayerDayLabel(dateKey, todayKey) {
   if (!dateKey) return 'Unknown day';
-  if (dateKey === todayKey) return 'Today';
+  const friendly = new Date(`${dateKey}T12:00:00`);
+  const datestr = friendly.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+  if (dateKey === todayKey) return `Today: ${datestr}`;
 
   const today = new Date(`${todayKey}T12:00:00`);
   const layerDate = new Date(`${dateKey}T12:00:00`);
 
   if (!Number.isNaN(today.getTime()) && !Number.isNaN(layerDate.getTime())) {
     const diffDays = Math.round((today - layerDate) / 86400000);
-    if (diffDays === 1) return 'Yesterday';
+    if (diffDays === 1) return `Yesterday: ${datestr}`;
   }
 
-  const friendly = new Date(`${dateKey}T12:00:00`);
   if (Number.isNaN(friendly.getTime())) return dateKey;
 
-  return friendly.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric'
-  });
+  return datestr;
+
+  // return friendly.toLocaleDateString('en-US', {
+  //   weekday: 'short',
+  //   month: 'short',
+  //   day: 'numeric'
+  // });
 }
 
 // Fix for default marker icons in react-leaflet
@@ -483,12 +490,12 @@ function App() {
     }
   }, []);
 
-  const handleReturnToToday = useCallback(() => {
-    setActiveLayerIndex(-1);
-    setIsPlaybackMode(false);
-    setIsLayerPlaying(false);
-    setPlaybackCursor(0);
-  }, []);
+  // const handleReturnToToday = useCallback(() => {
+  //   setActiveLayerIndex(-1);
+  //   setIsPlaybackMode(false);
+  //   setIsLayerPlaying(false);
+  //   setPlaybackCursor(0);
+  // }, []);
 
   const handleLiveCardChange = useCallback((index) => {
     if (index === 1 && mapRef.current) {
@@ -726,13 +733,13 @@ function App() {
       )}
       <div className="live-depth-layout">
         <div className="live-depth-timeline" aria-label="Live depth timeline">
-          <button
+          {/* <button
             type="button"
             className={`live-depth-return ${!activeLayer ? 'is-active' : ''}`}
             onClick={handleReturnToToday}
           >
             Today
-          </button>
+          </button> */}
 
           {liveDayLayers.length === 0 ? (
             <div className="live-depth-empty">No response layers yet</div>
