@@ -191,7 +191,7 @@ function App() {
   const [graphSize, setGraphSize] = useState({ width: 800, height: 500 });
   const [voteState, setVoteState] = useState({ hasVoted: false, response: null });
   const [liveDayLayers, setLiveDayLayers] = useState([]);
-  const [activeLayerIndex, setActiveLayerIndex] = useState(0);
+  const [activeLayerIndex, setActiveLayerIndex] = useState(-1);
   const [isPlaybackMode, setIsPlaybackMode] = useState(false);
   const [isLayerPlaying, setIsLayerPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -465,14 +465,25 @@ function App() {
       const layers = Array.isArray(stack?.layers) ? stack.layers : [];
       setLiveDayLayers(layers);
       setActiveLayerIndex((previous) => {
-        if (layers.length === 0) return 0;
-        return Math.min(previous, layers.length - 1);
+        if (layers.length === 0) return -1;
+
+        const todayIndex = layers.findIndex((layer) => layer?.dateKey === todayLaDateKey);
+
+        if (previous < 0) {
+          return todayIndex;
+        }
+
+        if (previous >= layers.length) {
+          return todayIndex >= 0 ? todayIndex : -1;
+        }
+
+        return previous;
       });
     } catch (stackError) {
       console.error('Error fetching live day stack:', stackError);
       setError('Failed to fetch live day layers');
     }
-  }, []);
+  }, [todayLaDateKey]);
 
   const handleLiveCardChange = useCallback((index) => {
     if (index === 1 && mapRef.current) {
@@ -650,7 +661,7 @@ function App() {
       });
 
       await fetchLiveStack();
-      setActiveLayerIndex(0);
+      setActiveLayerIndex(-1);
       await updateVisualization();
 
       const nextVoteState = { hasVoted: true, response: sentiment };
