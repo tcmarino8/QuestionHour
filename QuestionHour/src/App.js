@@ -143,7 +143,7 @@ class ErrorBoundary extends React.Component {
       return (
         <div style={{ padding: '20px', textAlign: 'center' }}>
           <h2>Something went wrong.</h2>
-          <pre style={{ textAlign: 'left', background: '#f5f5f5', padding: '10px' }}>
+          <pre style={{ textAlign: 'left', background: '#fff', padding: '10px' }}>
             {this.state.error?.toString()}
           </pre>
         </div>
