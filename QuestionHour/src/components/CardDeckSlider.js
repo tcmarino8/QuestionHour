@@ -19,7 +19,11 @@ export default function CardDeckSlider({
 
   const goToSlide = (index) => {
     if (swiperInstance) {
-      swiperInstance.slideTo(index);
+      if (shouldLoop) {
+        swiperInstance.slideToLoop(index);
+      } else {
+        swiperInstance.slideTo(index);
+      }
     }
   };
 
@@ -51,6 +55,7 @@ export default function CardDeckSlider({
         noSwipingClass="swiper-no-swiping"
         keyboard={{ enabled: true }}
         pagination={{ clickable: true }}
+        initialSlide={initialIndex}
         loop={shouldLoop}
         centeredSlides={true}
         slidesPerView={1.06}
@@ -68,15 +73,15 @@ export default function CardDeckSlider({
         }}
         onSwiper={(swiper) => {
           setSwiperInstance(swiper);
-          setActiveIndex(swiper.activeIndex);
+          setActiveIndex(swiper.realIndex);
           if (onActiveIndexChange) {
-            onActiveIndexChange(swiper.activeIndex);
+            onActiveIndexChange(swiper.realIndex);
           }
         }}
         onSlideChange={(swiper) => {
-          setActiveIndex(swiper.activeIndex);
+          setActiveIndex(swiper.realIndex);
           if (onActiveIndexChange) {
-            onActiveIndexChange(swiper.activeIndex);
+            onActiveIndexChange(swiper.realIndex);
           }
         }}
         className="card-deck-swiper"

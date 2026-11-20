@@ -249,6 +249,7 @@
 
 .question-vote-card {
   height: 100%;
+  overflow-y: auto;
   border-radius: 12px;
   padding: clamp(14px, 2.4vw, 28px);
   display: flex;

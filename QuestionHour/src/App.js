@@ -158,6 +158,8 @@ function App() {
   console.log('App component rendering');
   const REFLECTED_TYPE = 'reflected';
   const [currentQuestion, setCurrentQuestion] = useState({ text: '', theme: 'general', aiGenerated: false });
+  const currentQuestionRef = useRef(currentQuestion);
+  currentQuestionRef.current = currentQuestion;
   const [graphData, setGraphData] = useState({
     nodes: [
       { 
@@ -177,6 +179,8 @@ function App() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmittingVote, setIsSubmittingVote] = useState(false);
+  const voteInFlightRef = useRef(false);
   const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [responseStats, setResponseStats] = useState({
@@ -224,7 +228,8 @@ function App() {
     ? sortedActiveLayerResponses.slice(0, playbackCursor)
     : sortedActiveLayerResponses;
   const isMobile = viewportWidth <= 900;
-  const currentThemeId = (activeLayer?.displayTheme || currentQuestion.theme || 'general').toLowerCase();
+  const isViewingHistoricalLayer = Boolean(activeLayer && activeLayer.dateKey !== todayLaDateKey);
+  const currentThemeId = ((isViewingHistoricalLayer ? activeLayer.displayTheme : currentQuestion.theme) || 'general').toLowerCase();
   const isReflectionTheme = currentThemeId === 'reflection';
   const metadataDate = activeLayer
     ? formatLayerDayLabel(activeLayer.dateKey, todayLaDateKey)
@@ -234,8 +239,7 @@ function App() {
         day: 'numeric'
       });
   const dayThemeLabel = `${metadataDate} · ${currentThemeId.replace(/_/g, ' ')}`;
-  const activeDisplayQuestion = activeLayer?.displayQuestionText || currentQuestion.text;
-  const isViewingHistoricalLayer = Boolean(activeLayer && activeLayer.dateKey !== todayLaDateKey);
+  const activeDisplayQuestion = isViewingHistoricalLayer ? activeLayer.displayQuestionText : currentQuestion.text;
   const voteStorageKey = `qhour-vote-${currentQuestion.text || 'unknown'}`;
   const currentVisuals = THEME_VISUALS[currentThemeId] || THEME_VISUALS.general;
 
@@ -285,7 +289,7 @@ function App() {
       setCurrentQuestion(question);
     } catch (error) {
       console.error('Error fetching current question:', error);
-      setError('Failed to fetch current question');
+      setError('Failed to fetch the current question. Check the server logs for news or AI generation errors.');
     }
   }, []);
 
@@ -314,78 +318,53 @@ function App() {
   }, [currentThemeId]);
 
 
-  // Function to get ZIP code from coordinates using Google Places API
+  // Use the same reverse-geocoding provider as the location insights.
   const getZipFromCoordinates = async (lat, lng) => {
-    try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=AIzaSyCRwTIg_AYz2gPW8QTHFv0whcE4ruXi_ns`
-      );
-      const data = await response.json();
-      
-      if (data.status === 'OK' && data.results.length > 0) {
-        // Find the ZIP code in the address components
-        const addressComponents = data.results[0].address_components;
-        const zipComponent = addressComponents.find(
-          component => component.types.includes('postal_code')
-        );
-        return zipComponent ? zipComponent.long_name : null;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting ZIP code:', error);
-      return null;
+    const params = new URLSearchParams({ format: 'jsonv2', lat: String(lat), lon: String(lng) });
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`);
+    if (!response.ok) {
+      throw new Error(`Location lookup failed (${response.status})`);
     }
+    const data = await response.json();
+    if (data.error) throw new Error(`Location lookup failed: ${data.error}`);
+    const postalCode = data.address?.postcode?.trim();
+    if (!postalCode) throw new Error('No postal code found for this location');
+    return postalCode;
   };
 
-
-
   // Function to get user's location
-  const getLocation = () => {
+  const getLocation = async () => {
     if (!navigator.geolocation) {
       setError("Geolocation is not supported by your browser");
-      return;
+      return null;
     }
 
     setIsLoading(true);
     setError('');
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          const zipCode = await getZipFromCoordinates(latitude, longitude);
-         
-          if (!zipCode) {
-            setError("Could not determine ZIP code from your location");
-            setIsLoading(false);
-            return;
-          }
-
-          setUserLocation({
-            lat: latitude + (Math.random() - 0.5) * 0.01,
-            lng: longitude + (Math.random() - 0.5) * 0.01,
-            zip: zipCode
-          });
-          setSuccessMessage('Location found! You can now vote.');
-          setTimeout(() => setSuccessMessage(''), 3000);
-        } catch (error) {
-          console.error('Error in location handling:', error);
-          setError("Could not get your location. Please try again.");
-        } finally {
-          setIsLoading(false);
-        }
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        setError("Could not get your location. Please check your browser settings.");
-        setIsLoading(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0
-      }
-    );
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0
+        });
+      });
+      const { latitude, longitude } = position.coords;
+      const zipCode = await getZipFromCoordinates(latitude, longitude);
+      const location = {
+        lat: latitude + (Math.random() - 0.5) * 0.01,
+        lng: longitude + (Math.random() - 0.5) * 0.01,
+        zip: zipCode
+      };
+      setUserLocation(location);
+      return location;
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setError("Could not get your location or postal code. Check location permissions and try again.");
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Function to reset zoom and center network
@@ -490,12 +469,12 @@ function App() {
     }
   }, []);
 
-  // const handleReturnToToday = useCallback(() => {
-  //   setActiveLayerIndex(-1);
-  //   setIsPlaybackMode(false);
-  //   setIsLayerPlaying(false);
-  //   setPlaybackCursor(0);
-  // }, []);
+  const handleReturnToToday = useCallback(() => {
+    setActiveLayerIndex(-1);
+    setIsPlaybackMode(false);
+    setIsLayerPlaying(false);
+    setPlaybackCursor(0);
+  }, []);
 
   const handleLiveCardChange = useCallback((index) => {
     if (index === 1 && mapRef.current) {
@@ -656,25 +635,27 @@ function App() {
 
   // Add a new vote
   async function addVote(sentiment) {
-    if (!userLocation) {
-      setError("Please get your location first");
-      return;
-    }
-
+    if (voteInFlightRef.current || !currentQuestion.text) return;
+    voteInFlightRef.current = true;
+    setIsSubmittingVote(true);
+    setError('');
     try {
+      const location = userLocation || await getLocation();
+      if (!location) return;
+      if (currentQuestionRef.current.text !== currentQuestion.text) {
+        setError('The current question changed. Please review it and vote again.');
+        return;
+      }
+
       // Store in backend
       await api.addResponse({
         question: currentQuestion.text,
         response: sentiment,
         timestamp: new Date().toISOString(),
-        location: userLocation.zip,
-        lat: userLocation.lat,
-        lng: userLocation.lng
+        location: location.zip,
+        lat: location.lat,
+        lng: location.lng
       });
-
-      await fetchLiveStack();
-      setActiveLayerIndex(-1);
-      await updateVisualization();
 
       const nextVoteState = { hasVoted: true, response: sentiment };
       setVoteState(nextVoteState);
@@ -685,11 +666,16 @@ function App() {
       }
 
       setSuccessMessage('Vote recorded!');
+      setActiveLayerIndex(-1);
+      await Promise.all([fetchLiveStack(), updateVisualization()]);
       setTimeout(() => setSuccessMessage(''), 3000);
       setTimeout(() => resetZoom(), 500);
     } catch (error) {
       console.error('Error adding vote:', error);
       setError("Could not record vote. Please try again.");
+    } finally {
+      voteInFlightRef.current = false;
+      setIsSubmittingVote(false);
     }
   }
 
@@ -733,13 +719,13 @@ function App() {
       )}
       <div className="live-depth-layout">
         <div className="live-depth-timeline" aria-label="Live depth timeline">
-          {/* <button
+          <button
             type="button"
             className={`live-depth-return ${!activeLayer ? 'is-active' : ''}`}
             onClick={handleReturnToToday}
           >
             Today
-          </button> */}
+          </button>
 
           {liveDayLayers.length === 0 ? (
             <div className="live-depth-empty">No response layers yet</div>
@@ -762,12 +748,19 @@ function App() {
           <CardDeckSlider
             labels={['Question & Vote', 'Map View', 'Network View']}
             initialIndex={0}
-            loop={true}
+            loop={false}
             onActiveIndexChange={handleLiveCardChange}
           >
             <div className="question-vote-card">
               <div className="question-vote-chip">Question Of The Day</div>
               <div className="question-vote-text">{activeDisplayQuestion || currentQuestion.text || 'Loading question...'}</div>
+              {!isViewingHistoricalLayer && currentQuestion.text && (
+                <div>
+                  {currentQuestion.theme === 'reflection'
+                    ? 'Reflection day'
+                    : currentQuestion.aiGenerated ? 'AI-generated question' : 'Not AI-generated'}
+                </div>
+              )}
 
               <div className="question-float-row">
                 {currentVisuals.map((icon, index) => (
@@ -809,9 +802,15 @@ function App() {
                 <>
                   <div className="question-vote-actions">
                     <button
-                      onClick={getLocation}
+                      onClick={async () => {
+                        const location = await getLocation();
+                        if (location) {
+                          setSuccessMessage('Location found! You can now vote.');
+                          setTimeout(() => setSuccessMessage(''), 3000);
+                        }
+                      }}
                       className="question-vote-btn location"
-                      disabled={isLoading}
+                      disabled={isLoading || isSubmittingVote}
                     >
                       {isLoading ? 'Getting Location...' : 'Get My Location'}
                     </button>
@@ -820,7 +819,7 @@ function App() {
                       <button
                         onClick={() => addVote(REFLECTED_TYPE)}
                         className="question-vote-btn reflected"
-                        disabled={!userLocation}
+                        disabled={isLoading || isSubmittingVote || !currentQuestion.text}
                       >
                         A gentle reflection!
                       </button>
@@ -830,9 +829,9 @@ function App() {
                           onClick={() => addVote('agree')}
                           style={{
                             ...getVoteButtonStyles(currentQuestion.theme || 'general', 'agree'),
-                            opacity: !userLocation ? 0.5 : 1
+                            opacity: isLoading || isSubmittingVote || !currentQuestion.text ? 0.5 : 1
                           }}
-                          disabled={!userLocation}
+                          disabled={isLoading || isSubmittingVote || !currentQuestion.text}
                         >
                           Agree
                         </button>
@@ -840,9 +839,9 @@ function App() {
                           onClick={() => addVote('disagree')}
                           style={{
                             ...getVoteButtonStyles(currentQuestion.theme || 'general', 'disagree'),
-                            opacity: !userLocation ? 0.5 : 1
+                            opacity: isLoading || isSubmittingVote || !currentQuestion.text ? 0.5 : 1
                           }}
-                          disabled={!userLocation}
+                          disabled={isLoading || isSubmittingVote || !currentQuestion.text}
                         >
                           Disagree
                         </button>

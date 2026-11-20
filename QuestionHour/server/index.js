@@ -6,6 +6,9 @@ const path = require('path');
 const app = express();
 const fs = require('fs');
 const cron = require('node-cron');
+const validateResponseBody = require('./validateResponseBody');
+const selectDailyQuestion = require('./selectDailyQuestion');
+const { themes, themeIdToNatural, selectTargetHeadlines, buildHeadlineRequest } = require('./questionGeneration');
 let fetch;
 (async () => {
   fetch = (await import('node-fetch')).default;
@@ -71,20 +74,6 @@ async function runQuery(query, params = {}) {
   }
 }
 
-// Validate request body
-function validateResponseBody(body) {
-  const required = ['question', 'response', 'timestamp', 'location', 'lat', 'lng'];
-  const missing = required.filter(field => !body[field]);
-  
-  if (missing.length > 0) {
-    throw new Error(`Missing required fields: ${missing.join(', ')}`);
-  }
-  
-  if (typeof body.lat !== 'number' || typeof body.lng !== 'number') {
-    throw new Error('lat and lng must be numbers');
-  }
-}
-
 function toIsoString(value) {
   if (!value) return '';
   if (typeof value === 'string') return value;
@@ -102,6 +91,45 @@ function toLosAngelesDateKey(isoValue) {
 
 function getTodayLosAngelesDateKey() {
   return LA_DATE_FORMATTER.format(new Date());
+}
+
+const recentQuestionsQuery = `
+  MATCH (q:Question)
+  WHERE q.text IS NOT NULL
+  WITH q ORDER BY q.createdAt DESC LIMIT 50
+  OPTIONAL MATCH (q)-[:HAS_RESPONSE]->(r:Response)
+  RETURN q, count(r) AS responseCount
+  ORDER BY q.createdAt DESC
+`;
+
+function findDailyRecord(records, dateKey) {
+  const candidates = records.map(record => {
+    const node = record.get('q');
+    const count = record.get('responseCount');
+    return {
+      ...node.properties,
+      createdAt: toIsoString(node.properties.createdAt),
+      responseCount: count.toNumber(),
+      record
+    };
+  });
+  return selectDailyQuestion(candidates, dateKey, toLosAngelesDateKey)?.record;
+}
+
+async function markCurrentQuestion(node, theme) {
+  return runQuery(`
+    MATCH (q:Question)
+    WHERE elementId(q) = $questionId
+    OPTIONAL MATCH (other:Question {current: true})
+    WHERE other <> q
+    WITH q, collect(other) AS others
+    FOREACH (other IN others | SET other.current = false, other.archivedAt = datetime())
+    SET q.current = true,
+        q.theme = $theme,
+        q.aiGenerated = coalesce(q.aiGenerated, false),
+        q.updatedAt = datetime()
+    RETURN q
+  `, { questionId: node.elementId, theme });
 }
 
 // Get all responses
@@ -274,22 +302,12 @@ app.post('/api/responses', async (req, res) => {
       });
     }
     
-    // First, ensure the question exists with its properties
-    const questionQuery = `
+    const responseQuery = `
       MERGE (q:Question {text: $question})
-      ON CREATE SET 
+      ON CREATE SET
         q.createdAt = datetime(),
-        // q.timestamp = datetime(),
         q.current = false,
         q.aiGenerated = false
-      RETURN q
-    `;
-    console.log('Creating/merging question node...');
-    await runQuery(questionQuery, { question });
-    
-    // Then create the response
-    const responseQuery = `
-      MATCH (q:Question {text: $question})
       CREATE (r:Response {
         response: $response,
         timestamp: $timestamp,
@@ -298,9 +316,14 @@ app.post('/api/responses', async (req, res) => {
         lng: $lng
       })
       CREATE (q)-[:HAS_RESPONSE]->(r)
-      RETURN r
+      WITH r
+      OPTIONAL MATCH (other:Response {location: $location})
+      WHERE other <> r
+      FOREACH (_ IN CASE WHEN other IS NULL THEN [] ELSE [1] END |
+        MERGE (r)-[:SAME_ZIP]->(other)
+      )
+      RETURN DISTINCT r
     `;
-    console.log('Creating response node...');
     const responseResult = await runQuery(responseQuery, {
       question,
       response,
@@ -313,17 +336,6 @@ app.post('/api/responses', async (req, res) => {
     if (!responseResult || responseResult.length === 0) {
       throw new Error('Failed to create response node');
     }
-    
-    // Finally, create SAME_ZIP relationships
-    const zipQuery = `
-      MATCH (r:Response {location: $location})
-      MATCH (other:Response {location: $location})
-      WHERE other <> r
-      MERGE (r)-[:SAME_ZIP]->(other)
-      RETURN r
-    `;
-    console.log('Creating ZIP relationships...');
-    await runQuery(zipQuery, { location });
     
     const responseData = responseResult[0].get('r').properties;
     res.json(responseData);
@@ -365,22 +377,9 @@ app.get('/api/questions/current', async (req, res) => {
     const laTodayDateKey = getTodayLosAngelesDateKey();
     const laYesterdayDateKey = toLosAngelesDateKey(new Date(Date.now() - 86400000).toISOString());
 
-    const recentQuestionsQuery = `
-      MATCH (q:Question)
-      WHERE q.text IS NOT NULL
-      RETURN q
-      ORDER BY q.createdAt DESC
-      LIMIT 50
-    `;
-
     console.log('Checking for today\'s question');
     const recentQuestionRecords = await runQuery(recentQuestionsQuery);
-    const getRecordForDateKey = (dateKey) =>
-      recentQuestionRecords.find((record) => {
-        const node = record.get('q');
-        const props = node?.properties || {};
-        return toLosAngelesDateKey(toIsoString(props.createdAt)) === dateKey;
-      });
+    const getRecordForDateKey = (dateKey) => findDailyRecord(recentQuestionRecords, dateKey);
 
     let result = [];
     const todaysRecord = getRecordForDateKey(laTodayDateKey);
@@ -426,20 +425,8 @@ app.get('/api/questions/current', async (req, res) => {
       // If found today's question, ensure it's marked as current and has the correct theme
       const todayTheme = getTodayTheme();
       const todaysNode = result[0].get('q');
-      const updateQuery = `
-        MATCH (q:Question)
-        WHERE elementId(q) = $questionId
-        SET q.current = true,
-            q.theme = $theme,
-            q.aiGenerated = coalesce(q.aiGenerated, false),
-            q.updatedAt = datetime()
-        RETURN q
-      `;
       console.log('Found today\'s question, ensuring it\'s marked as current with theme:', todayTheme);
-      result = await runQuery(updateQuery, {
-        questionId: todaysNode.elementId,
-        theme: todayTheme
-      });
+      result = await markCurrentQuestion(todaysNode, todayTheme);
     }
     
     if (result.length === 0) {
@@ -458,17 +445,6 @@ app.get('/api/questions/current', async (req, res) => {
 
 
 
-// Two-word themes, in order: Sunday (0) to Saturday (6)
-const themes = [
-  'reflection',           // Sunday
-  'science_nature',       // Monday
-  'history_politics',     // Tuesday
-  'technology_innovation',// Wednesday
-  'arts_culture',         // Thursday
-  'society_ethics',       // Friday
-  'sports'                // Saturday
-];
-
 function getTodayTheme() {
   // Compute day of week in Los Angeles timezone without locale-string parsing.
   const weekdayName = LA_WEEKDAY_FORMATTER.format(new Date()).toLowerCase();
@@ -485,15 +461,6 @@ function getLosAngelesHour() {
 
   const hour = Number.parseInt(hourString, 10);
   return Number.isFinite(hour) ? hour : 0;
-}
-
-function themeIdToNatural(themeId) {
-  // Convert snake_case to natural phrase, e.g., "science_nature" -> "science and nature"
-  // Simple rule: replace '_' with ' and ' for two-part ids; fallback to spaces otherwise
-  if (!themeId) return '';
-  const parts = themeId.split('_');
-  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
-  return themeId.replace(/_/g, ' ');
 }
 
 function resolveThemeId(themeInput) {
@@ -604,28 +571,8 @@ app.post('/api/news/generate-question', async (req, res) => {
       fetch = (await import('node-fetch')).default;
     }
 
-    const prompt = `You are a helpful assistant that drafts a single, neutral, concise public discussion question (max 140 characters) relevant to current events that can be answered with agree or disagree. 
-    The question should be based on the \n\nTheme: ${naturalTheme}\n and come from the Headlines:\n${headlines.map((h, i) => `- ${h.title}`).join('\n')}
-    \n\n Guidelines:
-    \n- out of the headlines, focus the question on the more unique headlines
-    \n- make them actionable, example: "Ethical standards in media and technology are crucial for maintaining public trust in society." should instead be
-    "Developing Ethical standards in media and technology are crucial for maintaining public trust in society."
-
-    \n- Do not lead or assume facts; avoid yes/no phrasing like \"Do you support...\"
-    \n- Avoid naming individuals unless essential
-    \n- Be broadly applicable to a general audience
-    \n- Output only the question text without quotes.
-    \n- Make it specific enough so that each week will generate a unique question`;
-
-    const body = {
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You generate one concise, neutral civic question from headlines answerable with "Agree or Disagree".' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.4,
-      max_tokens: 80
-    };
+    const target = selectTargetHeadlines(headlines);
+    const body = buildHeadlineRequest(headlines, naturalTheme);
 
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -656,7 +603,7 @@ app.post('/api/news/generate-question', async (req, res) => {
     `;
     await runQuery(archiveQuery);
 
-    const sourcesJson = JSON.stringify(headlines.slice(0, MAX_HEADLINES_FOR_QUESTION));
+    const sourcesJson = JSON.stringify(target.headlines);
     const createQuery = `
       MERGE (q:Question {text: $text})
       SET q.current = true,
@@ -672,7 +619,7 @@ app.post('/api/news/generate-question', async (req, res) => {
     `;
     await runQuery(createQuery, { text: question, theme: themeId, sourcesJson });
 
-    return res.json({ themeId, naturalTheme, question, aiGenerated: true, headlines });
+    return res.json({ themeId, naturalTheme, question, aiGenerated: true, headlines, targetHeadlines: target.headlines, selectionReason: target.reason });
   } catch (e) {
     console.error('Error generating question:', e);
     return res.status(500).json({ error: 'Failed to generate question' });
@@ -755,74 +702,24 @@ async function fetchHeadlinesForTheme(naturalTheme, location, limit = MAX_HEADLI
     }
   }
 
-  // Final fallback: keep question generation functional even when external news sources fail.
-  if (headlines.length === 0) {
-    try {
-      const questionsPath = path.join(__dirname, 'questions.json');
-      const pool = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
-      const fallbackThemeId = resolveThemeId(naturalTheme);
-      const themedPool = pool.filter((q) => q && q.theme === fallbackThemeId && q.text);
-      const sourcePool = themedPool.length > 0 ? themedPool : pool.filter((q) => q && q.text);
-
-      for (const item of sourcePool) {
-        const title = String(item.text).trim();
-        if (!title || seen.has(title)) continue;
-
-        headlines.push({
-          title,
-          source: 'questionhour-local-fallback',
-          link: ''
-        });
-        seen.add(title);
-
-        if (headlines.length >= limit) break;
-      }
-    } catch (fallbackError) {
-      console.error('Local fallback headline generation failed:', fallbackError);
-    }
-  }
-
   return headlines.slice(0, limit);
 }
 
 async function generateQuestionFromHeadlines(headlines, naturalTheme) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    const firstTitle = headlines[0]?.title || 'today\'s news';
-    return {
-      text: `Given recent headlines about ${naturalTheme}, including \"${firstTitle}\", what aspect deserves more public attention right now?`,
-      aiGenerated: false
-    };
+    throw new Error('OPENAI_API_KEY is missing');
   }
   if (!fetch) {
     fetch = (await import('node-fetch')).default;
   }
-  const prompt = `You will generate ONE concise, neutral statement (<= 140 chars) for public discussion that people can AGREE or DISAGREE with.
-    
-Theme: ${naturalTheme}
-Headlines:
-${headlines.map((h, i) => `- ${h.title}`).join('\n')}
-
-Guidelines:
-- Output a single balanced statement (not a question).
-- Do not assume unproven facts; keep it general.
-- Avoid naming individuals unless essential.
-- Output ONLY the statement, without quotes.`;
-  const body = {
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: 'You generate one concise, neutral civic question from headlines.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.4,
-    max_tokens: 80
-  };
+  const body = buildHeadlineRequest(headlines, naturalTheme);
   const resp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify(body)
   });
-  if (!resp.ok) throw new Error('LLM call failed');
+  if (!resp.ok) throw new Error(`OpenAI request failed (HTTP ${resp.status})`);
   const data = await resp.json();
   const question = data?.choices?.[0]?.message?.content?.trim();
   if (!question) throw new Error('No question text');
@@ -832,60 +729,35 @@ Guidelines:
   };
 }
 
-async function setQuestionOfTheDay() {
-  // First check if we already have a question from today
-  const recentQuestionsQuery = `
-    MATCH (q:Question)
-    WHERE q.text IS NOT NULL
-    RETURN q
-    ORDER BY q.createdAt DESC
-    LIMIT 50
-  `;
+let generationInProgress;
+
+function setQuestionOfTheDay() {
+  if (!generationInProgress) {
+    generationInProgress = generateQuestionOfTheDay().finally(() => {
+      generationInProgress = null;
+    });
+  }
+  return generationInProgress;
+}
+
+async function generateQuestionOfTheDay() {
   
   const theme = getTodayTheme();
   const todayDateKey = getTodayLosAngelesDateKey();
   
   try {
     const recentQuestions = await runQuery(recentQuestionsQuery);
-    const todaysRecord = recentQuestions.find((record) => {
-      const node = record.get('q');
-      const props = node?.properties || {};
-      return toLosAngelesDateKey(toIsoString(props.createdAt)) === todayDateKey;
-    });
+    const todaysRecord = findDailyRecord(recentQuestions, todayDateKey);
 
     if (todaysRecord) {
       console.log('Question for today already exists, using it');
       // Make sure it's marked as current and has the correct theme
-      const updateQuery = `
-        MATCH (q:Question)
-        WHERE elementId(q) = $questionId
-        SET q.current = true,
-            q.theme = $theme,
-            q.aiGenerated = coalesce(q.aiGenerated, false),
-            q.updatedAt = datetime()
-        RETURN q
-      `;
-      const result = await runQuery(updateQuery, {
-        questionId: todaysRecord.get('q').elementId,
-        theme
-      });
+      const result = await markCurrentQuestion(todaysRecord.get('q'), theme);
       return result[0].get('q').properties;
     }
   } catch (e) {
     console.error('Error checking for existing question:', e);
-  }
-
-  // Archive any existing current question
-  const archiveQuery = `
-      MATCH (q:Question {current: true})
-      SET q.current = false,
-          q.archivedAt = datetime()
-      RETURN q
-    `;
-  try {
-    await runQuery(archiveQuery);
-  } catch (e) {
-    console.error('Error archiving current question during scheduler:', e);
+    throw e;
   }
 
   // Sunday: Reflection day — set a reflection placeholder instead of a debate question
@@ -904,7 +776,8 @@ async function setQuestionOfTheDay() {
       RETURN q
     `;
     try {
-      await runQuery(createReflectionQuery, { text: reflectionText, theme });
+      const result = await runQuery(createReflectionQuery, { text: reflectionText, theme });
+      await markCurrentQuestion(result[0].get('q'), theme);
       return { text: reflectionText, theme };
     } catch (e) {
       console.error('Error creating reflection day placeholder:', e);
@@ -922,7 +795,8 @@ async function setQuestionOfTheDay() {
       const questionText = generatedQuestion?.text || '';
       const aiGenerated = Boolean(generatedQuestion?.aiGenerated);
       if (questionText && questionText.length > 0) {
-        const sourcesJson = JSON.stringify(headlines.slice(0, MAX_HEADLINES_FOR_QUESTION));
+        const selectedHeadlines = aiGenerated ? selectTargetHeadlines(headlines).headlines : headlines.slice(0, 1);
+        const sourcesJson = JSON.stringify(selectedHeadlines);
         const createQuery = `
           MERGE (q:Question {text: $text})
           ON CREATE SET 
@@ -941,12 +815,18 @@ async function setQuestionOfTheDay() {
             q.updatedAt = datetime()
           RETURN q
         `;
-        await runQuery(createQuery, { text: questionText, theme, sourcesJson, aiGenerated });
+        const result = await runQuery(createQuery, { text: questionText, theme, sourcesJson, aiGenerated });
+        await markCurrentQuestion(result[0].get('q'), theme);
         return { text: questionText, theme };
       }
     }
+    throw new Error('No current news headlines were available');
   } catch (e) {
-    console.error('News-driven generation failed, will fallback:', e.message || e);
+    console.error('News-driven generation failed:', e.message || e);
+    if (process.env.ALLOW_LOCAL_QUESTION_FALLBACK !== 'true') {
+      throw e;
+    }
+    console.warn('Using local question fallback because ALLOW_LOCAL_QUESTION_FALLBACK is enabled');
   }
 
   // Fallback: pick a question from the local pool by theme
@@ -958,14 +838,7 @@ async function setQuestionOfTheDay() {
   }
   const selected = filtered[Math.floor(Math.random() * filtered.length)];
 
-  const naturalThemeFallback = themeIdToNatural(selected.theme);
-  let headlines = [];
-  try {
-    headlines = await fetchHeadlinesForTheme(naturalThemeFallback);
-  } catch (e) {
-    console.warn('Could not fetch fallback headlines:', e.message || e);
-  }
-  const sourcesJson = JSON.stringify((headlines || []).slice(0, MAX_HEADLINES_FOR_QUESTION));
+  const sourcesJson = JSON.stringify([]);
 
   const createQuery = `
     MERGE (q:Question {text: $text})
@@ -981,7 +854,8 @@ async function setQuestionOfTheDay() {
     RETURN q
   `;
   try {
-    await runQuery(createQuery, { text: selected.text, theme: selected.theme, sourcesJson });
+    const result = await runQuery(createQuery, { text: selected.text, theme: selected.theme, sourcesJson });
+    await markCurrentQuestion(result[0].get('q'), selected.theme);
     return selected;
   } catch (e) {
     console.error('Error creating scheduled question of the day (fallback):', e);
@@ -995,7 +869,7 @@ cron.schedule('0 0 * * *', setQuestionOfTheDay, {
 });
 
 // Also run once on server start to ensure there is a current item
-setQuestionOfTheDay();
+setQuestionOfTheDay().catch(error => console.error('Initial question generation failed:', error.message));
 
 // Set new current question
 app.post('/api/questions/current', async (req, res) => {
