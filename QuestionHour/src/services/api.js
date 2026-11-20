@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
+export const API_BASE_URL = process.env.NODE_ENV === 'production'
   ? 'https://question-hour.vercel.app'  
   : 'http://localhost:3001';
 

@@ -47,12 +47,12 @@ export default function CardDeckSlider({
       <Swiper
         modules={[Pagination, Keyboard]}
         grabCursor={false}
-        allowTouchMove={false}
+        allowTouchMove={true}
         touchStartPreventDefault={false}
         preventClicks={false}
         preventClicksPropagation={false}
         noSwiping={true}
-        noSwipingClass="swiper-no-swiping"
+        noSwipingSelector="button, input, select, textarea, a, .leaflet-container, .network-visualization"
         keyboard={{ enabled: true }}
         pagination={{ clickable: true }}
         initialSlide={initialIndex}
@@ -97,7 +97,7 @@ export default function CardDeckSlider({
             }}
           >
             <div
-              className={`card-deck-slide-content swiper-no-swiping ${activeIndex === index ? 'is-active' : 'is-inactive'}`}
+              className={`card-deck-slide-content ${activeIndex === index ? 'is-active' : 'is-inactive'}`}
               aria-hidden={activeIndex !== index}
             >
               {slide}

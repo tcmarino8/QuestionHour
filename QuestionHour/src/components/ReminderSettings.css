@@ -1,0 +1,15 @@
+.reminder-settings {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  color: #f3f3f3;
+}
+
+.reminder-settings button,
+.reminder-settings select {
+  padding: 6px 10px;
+  border-radius: 6px;
+}

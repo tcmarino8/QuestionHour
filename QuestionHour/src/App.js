@@ -8,6 +8,7 @@ import L from "leaflet";
 import { api } from './services/api';
 import { createGraphData, LAVENDER_COLOR } from './utils/visualizationUtils';
 import CardDeckSlider from './components/CardDeckSlider';
+import ReminderSettings from './components/ReminderSettings';
 
 // Map style configurations
 // Get Stadia API key from environment variable
@@ -240,7 +241,9 @@ function App() {
       });
   const dayThemeLabel = `${metadataDate} · ${currentThemeId.replace(/_/g, ' ')}`;
   const activeDisplayQuestion = isViewingHistoricalLayer ? activeLayer.displayQuestionText : currentQuestion.text;
-  const voteStorageKey = `qhour-vote-${currentQuestion.text || 'unknown'}`;
+  const voteStorageKey = currentQuestion.dayKey
+    ? `qhour-vote-${currentQuestion.dayKey}-${currentQuestion.text || 'unknown'}`
+    : `qhour-vote-${currentQuestion.text || 'unknown'}`;
   const currentVisuals = THEME_VISUALS[currentThemeId] || THEME_VISUALS.general;
 
   useEffect(() => {
@@ -713,6 +716,7 @@ function App() {
         </div>
       )}
 
+      <ReminderSettings />
       <div className="live-day-meta">{dayThemeLabel}</div>
       {(voteState.hasVoted || activeLayer) && (
         <div className="live-top-question">{activeDisplayQuestion || 'Question of the day'}</div>

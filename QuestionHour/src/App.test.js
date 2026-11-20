@@ -142,3 +142,11 @@ test('a pending location request cannot submit the same vote twice', async () =>
   resolveLocation({ coords: { latitude: 40, longitude: -74 } });
   await waitFor(() => expect(api.addResponse).toHaveBeenCalledTimes(1));
 });
+
+test('a repeated question on a new day does not reuse an earlier daily vote', async () => {
+  api.getCurrentQuestion.mockResolvedValue({ ...question, dayKey: '2026-11-20' });
+  localStorage.setItem(`qhour-vote-2026-11-19-${question.text}`, JSON.stringify({ hasVoted: true, response: 'agree' }));
+  render(<App />);
+  const button = await screen.findByRole('button', { name: 'Disagree' });
+  await waitFor(() => expect(button).toBeEnabled());
+});

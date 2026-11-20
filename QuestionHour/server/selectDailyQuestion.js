@@ -1,5 +1,5 @@
 function selectDailyQuestion(candidates, dateKey, getDateKey) {
-  const today = candidates.filter(candidate => getDateKey(candidate.createdAt) === dateKey);
+  const today = candidates.filter(candidate => (candidate.dayKey || getDateKey(candidate.createdAt)) === dateKey);
   const current = today.filter(candidate => candidate.current);
   const pool = current.length ? current : today;
   if (!pool.length) return null;
